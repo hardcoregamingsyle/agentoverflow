@@ -176,6 +176,123 @@ export const playgroundSearch = makeFunctionReference<
   PlaygroundSearchResult
 >("agentoverflow:playgroundSearch");
 
+/** Daily-active-user ping; the layout fires it once per load for signed-in users. */
+export const pingDau = makeFunctionReference<
+  "mutation",
+  { token: string },
+  null
+>("agentoverflow:pingDau");
+
+// ── Admin (shared Thalamus admin token; see /admin) ────────────────────────
+
+export const adminLogin = makeFunctionReference<
+  "action",
+  { password: string; answer1: string; answer2: string; answer3: string },
+  { token: string }
+>("admin:adminLogin");
+
+export const verifyAdminToken = makeFunctionReference<
+  "query",
+  { token: string },
+  boolean
+>("admin:verifyAdminToken");
+
+export interface AdminStats {
+  learnings: {
+    total: number;
+    pending: number;
+    scored: number;
+    rejected: number;
+    duplicate: number;
+    byTier: { low: number; medium: number; gold: number };
+  };
+  keys: { total: number; active: number };
+  users: { total: number; creditsInCirculation: number; totalPoints: number };
+}
+
+/** One day of platform usage; series is ordered oldest first. */
+export interface AdminUsagePoint {
+  date: string;
+  dau: number;
+  dauSite: number;
+  dauApi: number;
+  requests: number;
+  creditsSpent: number;
+}
+
+export interface AdminLearning {
+  id: string;
+  title: string;
+  status: LearningStatus;
+  score: number | null;
+  tier: LearningTier | null;
+  scoreRationale: string | null;
+  creditsDelta: number | null;
+  userEmail: string;
+  inCorpus: boolean;
+  createdAt: number;
+}
+
+export interface AdminUser {
+  userId: string;
+  email: string;
+  name: string | null;
+  balance: number;
+  points: number;
+  tier: string;
+  dailyRefill: number;
+}
+
+export interface CorpusHealth {
+  ok: boolean;
+  qdrant?: boolean;
+  postgres?: boolean;
+  points?: number;
+  error?: string;
+}
+
+export const adminStats = makeFunctionReference<
+  "query",
+  { adminToken: string },
+  AdminStats
+>("agentoverflowAdmin:adminStats");
+
+export const adminUsageSeries = makeFunctionReference<
+  "query",
+  { adminToken: string; days?: number },
+  AdminUsagePoint[]
+>("agentoverflowAdmin:adminUsageSeries");
+
+export const adminLearnings = makeFunctionReference<
+  "query",
+  { adminToken: string; limit?: number },
+  AdminLearning[]
+>("agentoverflowAdmin:adminLearnings");
+
+export const adminUsers = makeFunctionReference<
+  "query",
+  { adminToken: string },
+  AdminUser[]
+>("agentoverflowAdmin:adminUsers");
+
+export const adjustCredits = makeFunctionReference<
+  "action",
+  { adminToken: string; userId: string; delta: number },
+  { balance: number }
+>("agentoverflowAdmin:adjustCredits");
+
+export const adminCorpusHealth = makeFunctionReference<
+  "action",
+  { adminToken: string },
+  CorpusHealth
+>("agentoverflowAdmin:adminCorpusHealth");
+
+export const deleteLearning = makeFunctionReference<
+  "action",
+  { adminToken: string; learningId: string },
+  { ok: boolean }
+>("agentoverflowAdmin:deleteLearning");
+
 // ── Derived URLs ────────────────────────────────────────────────────────────
 
 /** The Convex HTTP-router origin (agents hit `${AO_API_BASE}/ao/v1/*`). */

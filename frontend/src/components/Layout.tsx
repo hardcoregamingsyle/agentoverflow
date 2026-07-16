@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { pingDau } from "@/lib/thalamusApi";
 import { cn } from "@/lib/utils";
+import { useMutation } from "convex/react";
 import { LogOut } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router";
 
 const NAV_LINKS = [
@@ -13,8 +15,14 @@ const NAV_LINKS = [
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { isAuthenticated, user, signOut } = useAuth();
+  const { isAuthenticated, user, signOut, token } = useAuth();
   const navigate = useNavigate();
+  const ping = useMutation(pingDau);
+
+  // DAU ping — server dedupes per user per day and throttles repeat writes.
+  useEffect(() => {
+    if (token) void ping({ token }).catch(() => {});
+  }, [token, ping]);
 
   return (
     <div className="min-h-screen flex flex-col font-mono">
