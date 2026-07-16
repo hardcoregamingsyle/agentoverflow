@@ -1,0 +1,8 @@
+# Heavy deps — only needed on the VM for embed-load / graph-load.
+# The pure-logic modules and the whole test suite run on the stdlib alone.
+fastembed>=0.4
+qdrant-client>=1.9
+psycopg[binary]>=3.1
+# Optional: lxml could replace xml.etree for a modest parse speedup, but the
+# pipeline uses stdlib iterparse and does not require it.
+# lxml>=5.0
