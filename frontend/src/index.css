@@ -1,0 +1,108 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-mono: var(--terminal-font);
+}
+
+/* ── AGENTOVERFLOW — same neutral near-black palette as Thalamus ──────────
+   Chroma-0 surfaces, electric-blue primary, warm amber accent. Dark only. */
+:root {
+  --radius: 0.625rem;
+  --terminal-font: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --background: oklch(0.10 0 0);
+  --foreground: oklch(0.95 0 0);
+
+  --card: oklch(0.13 0 0);
+  --card-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.13 0 0);
+  --popover-foreground: oklch(0.95 0 0);
+
+  /* Primary — Electric Blue (shared Thalamus brand accent) */
+  --primary: oklch(0.62 0.20 250);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.17 0 0);
+  --secondary-foreground: oklch(0.82 0 0);
+
+  --muted: oklch(0.16 0 0);
+  --muted-foreground: oklch(0.58 0 0);
+
+  /* Accent — Warm amber/gold (gold-tier learnings, highlights) */
+  --accent: oklch(0.72 0.16 65);
+  --accent-foreground: oklch(0.08 0 0);
+
+  --destructive: oklch(0.58 0.22 15);
+
+  --border: oklch(0.26 0 0);
+  --input: oklch(0.15 0 0);
+  --ring: oklch(0.62 0.20 250);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--color-background);
+    /* Flat near-black with a whisper of azure at the very top edge only. */
+    background-image:
+      radial-gradient(ellipse 90% 35% at 50% 0%, oklch(0.62 0.20 250 / 0.05) 0%, transparent 60%);
+    background-attachment: fixed;
+  }
+  button:not([disabled]),
+  [role="button"]:not([disabled]) {
+    cursor: pointer;
+  }
+}
+
+/* Terminal cursor blink */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.terminal-cursor::after {
+  content: '█';
+  animation: blink 1s step-end infinite;
+  color: var(--color-primary);
+}
+
+.terminal-glow { text-shadow: 0 0 12px oklch(0.62 0.20 250 / 0.4); }
+.terminal-glow-amber { text-shadow: 0 0 8px oklch(0.72 0.16 65 / 0.5); }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: oklch(0.62 0.20 250 / 0.3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: oklch(0.62 0.20 250 / 0.6); }
+
+::selection { background: oklch(0.62 0.20 250 / 0.25); color: oklch(0.96 0.008 240); }
