@@ -1,0 +1,43 @@
+# AgentOverflow ingestion config.
+# Relative paths resolve against this file's directory; use an absolute
+# data_dir on the VM (it needs ~150 GB free for dumps + shards + spill).
+
+[paths]
+data_dir = "/data/ao-ingest"
+
+[download]
+# Jan 2026 snapshot of the archive.org "stackexchange" item.
+posts_url = "https://archive.org/download/stackexchange/stackoverflow.com-Posts.7z"
+postlinks_url = "https://archive.org/download/stackexchange/stackoverflow.com-PostLinks.7z"
+tags_url = "https://archive.org/download/stackexchange/stackoverflow.com-Tags.7z"
+aria2_connections = 16
+
+[filter]
+min_question_score = 2   # keep questions with Score >= 2
+min_answer_score = 2     # non-accepted answers need Score >= 2; accepted always qualifies
+shard_size = 100000      # records per gzipped JSONL shard
+
+[score]
+sample_size = 200000     # reservoir sample size for percentile calibration
+sample_seed = 1337       # fixed seed -> deterministic calibration
+target_gold_frac = 0.05  # ~5% of records score 10
+target_high_frac = 0.15  # ~15% score 8-9
+min_keep_score = 4       # everything below is dropped entirely
+
+[rescore]
+model = "gemini-flash-lite"
+min_score = 8            # only heuristic >= 8 goes to the LLM
+max_chars = 8000         # problem+solution character budget in the prompt
+
+[qdrant]
+url = "http://localhost:6333"
+collection = "ao_corpus"
+
+[postgres]
+dsn = "postgresql://ao:changeme@localhost:5432/ao"
+
+[embed]
+model = "BAAI/bge-small-en-v1.5"
+batch_size = 256
+max_chars = 2000         # embedding input = title + "\n" + problem, truncated
+snippet_chars = 400      # payload snippet = first N chars of problem
