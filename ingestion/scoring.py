@@ -8,8 +8,8 @@ The heuristic from the spec:
 where ``pct`` is the percentile rank over the filtered corpus, approximated
 by a reservoir sample. ``raw`` in [0, 1] is then mapped to an integer 0-10
 through cutpoints calibrated on the sampled raw distribution so that ~5% of
-records land on 10 and ~15% on 8-9. Scores below 4 are dropped entirely;
-4 = quarantine, 5-7 = low, 8-9 = medium, 10 = gold.
+records land on 10 and ~15% on 8-9. Scores below 5 are dropped entirely;
+5-7 = low, 8-9 = medium, 10 = gold.
 """
 
 from __future__ import annotations
@@ -99,13 +99,11 @@ def score_from_cutpoints(raw: float, cuts: Sequence[float]) -> int:
 
 
 def tier_for_score(score: int) -> str | None:
-    """Tier for an integer score. None means dropped (the delete-below-4 rule)."""
+    """Tier for an integer score. None means dropped (the delete-below-5 rule)."""
     if not 0 <= score <= 10:
         raise ValueError(f"score out of range: {score}")
-    if score < 4:
+    if score < 5:
         return None
-    if score == 4:
-        return "quarantine"
     if score <= 7:
         return "low"
     if score <= 9:

@@ -97,12 +97,11 @@ class TestCutpoints(unittest.TestCase):
 
 
 class TestTierMapping(unittest.TestCase):
-    def test_drop_below_four(self):
-        for s in (0, 1, 2, 3):
+    def test_drop_below_five(self):
+        for s in (0, 1, 2, 3, 4):
             self.assertIsNone(tier_for_score(s))
 
     def test_tiers(self):
-        self.assertEqual(tier_for_score(4), "quarantine")
         for s in (5, 6, 7):
             self.assertEqual(tier_for_score(s), "low")
         for s in (8, 9):

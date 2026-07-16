@@ -22,7 +22,7 @@ sample_size = 200000     # reservoir sample size for percentile calibration
 sample_seed = 1337       # fixed seed -> deterministic calibration
 target_gold_frac = 0.05  # ~5% of records score 10
 target_high_frac = 0.15  # ~15% score 8-9
-min_keep_score = 4       # everything below is dropped entirely
+min_keep_score = 5       # everything below is dropped entirely — 0-4 is trash
 
 [rescore]
 model = "gemini-flash-lite"

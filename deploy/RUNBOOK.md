@@ -102,7 +102,7 @@ Run the stages inside tmux — the long ones outlive any SSH session:
 sudo apt-get install -y tmux && tmux new -s ingest
 python -m ingestion download      # ~1-2 h   (archive.org SO dump, ~60 GB)
 python -m ingestion filter        # ~4-8 h   (stream-parse Posts.xml)
-python -m ingestion score         # fast     (heuristic 0-10, drops <4)
+python -m ingestion score         # fast     (heuristic 0-10, drops <5)
 python -m ingestion rescore-llm   # optional (Gemini re-score, ~$20-60; skippable)
 python -m ingestion embed-load    # ~12-24 h (embeddings -> Qdrant, text -> Postgres)
 python -m ingestion graph-load    # fast     (PostLinks -> doc_links, doc_tags)

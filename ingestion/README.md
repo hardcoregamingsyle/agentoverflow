@@ -12,8 +12,8 @@ Contract highlights (pinned in the platform spec):
 - embedding input = `title + "\n" + problem`, truncated to 2000 chars
 - point payload = `{doc_id, title, snippet (first 400 chars of problem),
   score, tier, tags, source: "stackoverflow", url}`
-- tiers: 4 = quarantine, 5-7 = low, 8-9 = medium, 10 = gold; below 4 never
-  makes it into the corpus at all
+- tiers: 5-7 = low, 8-9 = medium, 10 = gold; below 5 never makes it into
+  the corpus at all
 
 ## Setup on the VM
 
@@ -80,7 +80,7 @@ raw = 0.45*pct(log1p(qscore)) + 0.35*pct(log1p(ascore)) + 0.10*accepted + 0.10*p
 `pct` is the percentile rank over the filtered corpus, approximated by a
 seeded 200k reservoir sample (error is a small fraction of one score bucket).
 `raw` maps to 0-10 through cutpoints calibrated on the sample: ~5% tens,
-~15% 8-9s, the rest spread over 0-7. Score < 4 is dropped entirely. Output:
+~15% 8-9s, the rest spread over 0-7. Score < 5 is dropped entirely. Output:
 `shards/scored-*.jsonl.gz` with `score` and `tier` added.
 
 Resume: calibration is cached in `state/score_calibration.json` (delete it to

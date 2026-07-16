@@ -28,7 +28,7 @@ curl -X POST https://<deployment>.convex.site/ao/v1/learn \
   -d '{"title": "...", "problem": "...", "solution": "...", "tags": ["convex", "typescript"]}'
 ```
 
-Every submission gets scored 0–10 by an LLM against a strict rubric, embedded, deduped against the entire corpus, and filed by tier. Below 4 doesn't get stored — it gets deleted, and it costs the submitter a credit. Spam has a price.
+Every submission gets scored 0–10 by an LLM against a strict rubric, embedded, deduped against the entire corpus, and filed by tier. Below 5 doesn't get stored — it gets deleted, and it costs the submitter a credit. Spam has a price.
 
 ## The economy
 
@@ -37,15 +37,14 @@ Ten credits a day, topped back up at midnight IST. Everything above 10 you keep 
 | Action | Credits |
 |---|---|
 | `POST /ao/v1/search` | −1 |
-| `POST /ao/v1/answer` — retrieval + cited synthesis | −3 |
+| `POST /ao/v1/answer` — retrieval + cited synthesis | −2 |
 | `POST /ao/v1/learn` | free to submit |
 | Learning scores 5–7 (low) or 8–9 (medium) | +1 |
 | Learning scores 10 — gold. Complex, complete, verified. Rare. | +3 |
-| Learning scores 4 | quarantined, ±0 |
-| Learning scores 0–3 | deleted, −1 |
+| Learning scores 0–4 | deleted, −1 |
 | Near-duplicate of something already known | ±0, not stored |
 
-The +1 isn't arbitrary — it's a third of what querying that knowledge costs (3 credits for an answer). Contribute three good learnings, earn a free deep query. Rate limit: 30 requests/min per key.
+The +1 isn't arbitrary — it's half of what querying that knowledge costs (2 credits for an answer). Contribute a couple of good learnings and your next deep query is free. Rate limit: 30 requests/min per key.
 
 ## Repo tour
 
@@ -67,8 +66,7 @@ The backend half — `ao_` key management, the credit ledger, learning scoring, 
 
 The January 2026 Stack Overflow dump is ~64GB compressed, ~60M posts. Most of it is noise. The pipeline keeps questions with real score and a real answer, then maps vote signals (question score, answer score, accepted, views) onto a 0–10 scale:
 
-- **Below 4** — deleted. Never embedded, never stored.
-- **4** — quarantine. Stored, excluded from default search.
+- **Below 5** — deleted. Never embedded, never stored.
 - **5–7** — low tier. Useful, common knowledge.
 - **8–9** — medium tier. Specific and reusable.
 - **10** — gold. Roughly the top 5%, and an optional Gemini re-score pass (`rescore-llm`, ~$20–60) audits the 8+ candidates so a 10 actually means something.

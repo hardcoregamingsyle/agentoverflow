@@ -20,7 +20,7 @@ def main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest="stage", required=True)
     sub.add_parser("download", help="fetch the 7z dump archives from archive.org")
     sub.add_parser("filter", help="stream Posts.xml, keep good Q&A pairs, write shards")
-    sub.add_parser("score", help="heuristic 0-10 scoring, drop < 4, assign tiers")
+    sub.add_parser("score", help="heuristic 0-10 scoring, drop < 5, assign tiers")
     rescore = sub.add_parser("rescore-llm", help="optional Gemini rescoring of heuristic 8+")
     rescore.add_argument("--skip", action="store_true",
                          help="mark the stage done without calling any API")

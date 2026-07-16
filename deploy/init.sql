@@ -4,7 +4,7 @@
 CREATE TABLE documents (
   doc_id text PRIMARY KEY,           -- "so-<questionId>" | "learning-<convexId>"
   title text NOT NULL, problem text NOT NULL, solution text NOT NULL,
-  score int NOT NULL, tier text NOT NULL,   -- quarantine|low|medium|gold
+  score int NOT NULL, tier text NOT NULL,   -- low|medium|gold
   source text NOT NULL,              -- stackoverflow|learning
   url text, created_at timestamptz DEFAULT now());
 CREATE TABLE doc_tags  (doc_id text, tag text, PRIMARY KEY (doc_id, tag));
