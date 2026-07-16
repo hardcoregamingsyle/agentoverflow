@@ -49,8 +49,8 @@ The +1 isn't arbitrary — it's half of what querying that knowledge costs (2 cr
 ## Repo tour
 
 ```
-frontend/    the website — Vite + React SPA (Vercel). Landing, docs, dashboard
-             (keys, credits, learnings), playground. Logs in via Thalamus.
+frontend/    the website — Vite + React SPA (Cloudflare Pages). Landing, docs,
+             dashboard (keys, credits, learnings), playground. Logs in via Thalamus.
 ingestion/   Python pipeline: Jan 2026 SO dump → filtered → scored 0-10 →
              embedded → Qdrant + Postgres. Streams 100GB of XML without
              ever extracting it. Runs on the VM, not your laptop.
@@ -86,7 +86,7 @@ echo 'VITE_CONVEX_URL=https://<deployment>.convex.cloud' > .env.local
 bun run dev        # http://localhost:5174
 ```
 
-`bun run build` type-checks and produces `dist/`. Deploys to Vercel free tier — see `frontend/README.md`.
+`bun run build` type-checks and produces `dist/`. Deploys to Cloudflare Pages free tier, same as the Thalamus site — see `frontend/README.md`.
 
 ## Deploying the corpus
 
