@@ -1,0 +1,7 @@
+{
+  "name": "agentoverflow",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && bun install && bun run build"
+  }
+}

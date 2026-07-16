@@ -1,0 +1,6 @@
+# cloudflare pages config, at the repo root so Pages finds it no matter what
+# the dashboard's root-directory setting says. `bun run build` here builds the
+# frontend; output lands in frontend/dist.
+name = "agentoverflow"
+compatibility_date = "2026-07-01"
+pages_build_output_dir = "frontend/dist"

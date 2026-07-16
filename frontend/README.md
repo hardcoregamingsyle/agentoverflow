@@ -45,12 +45,15 @@ bun run lint         # ESLint
 
 ## Deploy (Cloudflare Pages)
 
-Same host as the Thalamus site — one dashboard for the whole ecosystem.
+Same host as the Thalamus site — one dashboard for the whole ecosystem. The
+repo builds from its root on purpose: a root `package.json` build script cds
+in here, and the root `wrangler.toml` tells Pages the output lives in
+`frontend/dist`. No root-directory fiddling required.
 
 1. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git**,
    pick this repo.
-2. Build config: **root directory** `frontend`, build command `bun run build`,
-   output directory `dist`.
+2. Build command: `bun run build`. Leave root directory and output directory
+   alone — `wrangler.toml` at the repo root carries the output path.
 3. Add the env var `VITE_CONVEX_URL` (Production + Preview). A build without
    it doesn't blank-page — it renders a config-error screen — but it also
    doesn't work, so set it.
@@ -61,8 +64,8 @@ Same host as the Thalamus site — one dashboard for the whole ecosystem.
    (`AO_FRONTEND_URL` in the Thalamus deployment's env) — otherwise the
    Google/GitHub redirect gets rejected.
 
-CLI flavour, if you'd rather not click: `bun run build && bunx wrangler pages deploy dist`
-— `wrangler.toml` carries the project name and output dir, so no flags needed.
+CLI flavour, if you'd rather not click: from the repo root,
+`bun run build && bunx wrangler pages deploy frontend/dist`.
 
 ## Map
 
