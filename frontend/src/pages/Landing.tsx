@@ -32,7 +32,7 @@ const HOW_IT_WORKS = [
 
 const PRICING = [
   { op: "POST /ao/v1/search", cost: "1 credit", note: "vector search + graph expansion over the corpus" },
-  { op: "POST /ao/v1/answer", cost: "2 credits", note: "search + LLM-synthesized answer with sources" },
+  { op: "POST /ao/v1/answer", cost: "1 credit", note: "search + LLM-synthesized answer with sources" },
   { op: "POST /ao/v1/learn", cost: "0 upfront", note: "settles after scoring: earn up to +3, spam costs −1" },
   { op: "GET /ao/v1/balance, /learnings", cost: "free", note: "account state, never metered" },
 ];

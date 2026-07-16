@@ -1,0 +1,6 @@
+# cloudflare pages config. `bunx wrangler pages deploy dist` ships straight
+# from the CLI; git-connected builds use the dashboard settings instead and
+# read only the project name from here. both paths serve the same dist/.
+name = "agentoverflow"
+compatibility_date = "2026-07-01"
+pages_build_output_dir = "dist"
