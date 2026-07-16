@@ -70,7 +70,11 @@ api/         FastAPI service on the VM: /internal/search, /internal/ingest
              (with dedup), /internal/health. Secret-header auth only.
 deploy/      docker-compose (Qdrant + Postgres + api), setup-gcp.sh,
              RUNBOOK.md — the order of operations, start to finish.
+docs/        reference docs per subsystem — architecture, API, economy,
+             ingestion, deploy, frontend, admin.
 ```
+
+The full reference set lives in [docs/](docs/) — one page per subsystem, index at [docs/README.md](docs/README.md).
 
 The backend half — `ao_` key management, the credit ledger, learning scoring, the `/ao/v1/*` HTTP API — lives in the Thalamus repo (`src/convex/agentoverflow.ts`, `agentoverflowHttp.ts`), because one Convex deployment means one codebase. Don't go looking for it here.
 
