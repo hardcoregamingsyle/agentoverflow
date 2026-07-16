@@ -8,7 +8,7 @@ Two passes over the filtered shards:
   ~5% tens and ~15% 8-9s. Persisted to state/score_calibration.json so the
   mapping stays fixed across resumes and reruns.
 * mapping: score every record, drop score < score.min_keep_score (the
-  delete-below-4 rule), attach the tier, and write scored-*.jsonl.gz
+  delete-below-5 rule), attach the tier, and write scored-*.jsonl.gz
   shard-for-shard.
 
 Resume: an existing scored shard is skipped, so re-running continues where

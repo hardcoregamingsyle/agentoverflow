@@ -6,7 +6,7 @@ import uuid
 
 from pydantic import BaseModel
 
-DEDUP_THRESHOLD = 0.95
+DEDUP_THRESHOLD = 0.95  # top-1 cosine at/above this is the same knowledge reworded — nobody farms credits here
 SNIPPET_CHARS = 400
 
 

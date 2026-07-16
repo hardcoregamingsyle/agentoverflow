@@ -15,7 +15,6 @@ class SearchRequest(BaseModel):
     query: str
     top_k: int = 5
     tags: list[str] = []
-    include_quarantine: bool = False
     expand: bool = True
 
 
@@ -62,7 +61,7 @@ def run_search(req: SearchRequest) -> SearchResponse:
         docs = _fetch_documents(conn, hit_ids)
         neighbor_sim: dict[str, float] = {}
         if req.expand and hit_ids:
-            neighbor_sim = _expand_neighbors(conn, similarities, req.include_quarantine, docs)
+            neighbor_sim = _expand_neighbors(conn, similarities, docs)
         tags_map = _fetch_tags(conn, list(docs))
 
     candidates = [
@@ -84,22 +83,17 @@ def run_search(req: SearchRequest) -> SearchResponse:
 def _build_filter(req: SearchRequest) -> Any:
     from qdrant_client import models as qm
 
-    must = []
-    if req.tags:
-        # tag filter matches ANY of the given tags
-        must.append(qm.FieldCondition(key="tags", match=qm.MatchAny(any=req.tags)))
-    must_not = []
-    if not req.include_quarantine:
-        must_not.append(qm.FieldCondition(key="tier", match=qm.MatchValue(value="quarantine")))
-    if not must and not must_not:
+    if not req.tags:
         return None
-    return qm.Filter(must=must or None, must_not=must_not or None)
+    # tag filter matches ANY of the given tags
+    return qm.Filter(
+        must=[qm.FieldCondition(key="tags", match=qm.MatchAny(any=req.tags))]
+    )
 
 
 def _expand_neighbors(
     conn: Any,
     similarities: dict[str, float],
-    include_quarantine: bool,
     docs: dict[str, dict[str, Any]],
 ) -> dict[str, float]:
     """1-hop expansion via doc_links. Neighbors inherit the (best) similarity
@@ -115,25 +109,19 @@ def _expand_neighbors(
         neighbor_sim[dst] = max(neighbor_sim.get(dst, 0.0), similarities[src])
     if not neighbor_sim:
         return {}
-    neighbor_docs = _fetch_documents(
-        conn, list(neighbor_sim), exclude_quarantine=not include_quarantine
-    )
+    neighbor_docs = _fetch_documents(conn, list(neighbor_sim))
     docs.update(neighbor_docs)
     return {doc_id: sim for doc_id, sim in neighbor_sim.items() if doc_id in neighbor_docs}
 
 
-def _fetch_documents(
-    conn: Any, doc_ids: list[str], exclude_quarantine: bool = False
-) -> dict[str, dict[str, Any]]:
+def _fetch_documents(conn: Any, doc_ids: list[str]) -> dict[str, dict[str, Any]]:
     if not doc_ids:
         return {}
-    sql = (
+    rows = conn.execute(
         "SELECT doc_id, title, problem, solution, score, tier, source, url "
-        "FROM documents WHERE doc_id = ANY(%s)"
-    )
-    if exclude_quarantine:
-        sql += " AND tier <> 'quarantine'"
-    rows = conn.execute(sql, (doc_ids,)).fetchall()
+        "FROM documents WHERE doc_id = ANY(%s)",
+        (doc_ids,),
+    ).fetchall()
     return {
         row[0]: {
             "doc_id": row[0],

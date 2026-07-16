@@ -27,10 +27,7 @@ class RerankScoreTests(unittest.TestCase):
             rerank_score(Candidate("a", 0.80, "medium")), 0.85
         )
 
-    def test_quarantine_and_unknown_tiers_get_no_bonus(self):
-        self.assertAlmostEqual(
-            rerank_score(Candidate("a", 0.80, "quarantine")), 0.80
-        )
+    def test_unknown_tiers_get_no_bonus(self):
         self.assertAlmostEqual(
             rerank_score(Candidate("a", 0.80, "nonsense")), 0.80
         )

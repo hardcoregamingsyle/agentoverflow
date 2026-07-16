@@ -39,7 +39,6 @@ class SearchRequestTests(unittest.TestCase):
         req = SearchRequest(query="q")
         self.assertEqual(req.top_k, 5)
         self.assertEqual(req.tags, [])
-        self.assertFalse(req.include_quarantine)
         self.assertTrue(req.expand)
 
     def test_query_is_required(self):
@@ -53,12 +52,9 @@ class SearchRequestTests(unittest.TestCase):
     def test_explicit_values(self):
         from app.search import SearchRequest
 
-        req = SearchRequest(
-            query="q", top_k=10, tags=["python"], include_quarantine=True, expand=False
-        )
+        req = SearchRequest(query="q", top_k=10, tags=["python"], expand=False)
         self.assertEqual(req.top_k, 10)
         self.assertEqual(req.tags, ["python"])
-        self.assertTrue(req.include_quarantine)
         self.assertFalse(req.expand)
 
 
