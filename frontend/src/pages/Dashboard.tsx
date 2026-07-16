@@ -31,7 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import * as thalamus from "@/lib/thalamusApi";
-import type { LedgerReason } from "@/lib/thalamusApi";
+import type { AoAccount, LedgerReason } from "@/lib/thalamusApi";
 import { cn } from "@/lib/utils";
 import {
   Check,
@@ -78,34 +78,106 @@ function formatDay(ms: number) {
 
 /* ── balance + ledger ── */
 
+// Same color language as the learning TierBadge: neutral → blue → violet → gold.
+const CONTRIB_TIER_STYLES: Record<string, string> = {
+  lurker: "border-border bg-secondary text-secondary-foreground",
+  contributor: "border-primary/50 bg-primary/15 text-primary",
+  regular: "border-primary/50 bg-primary/15 text-primary",
+  veteran: "border-violet-400/50 bg-violet-400/15 text-violet-400",
+  legend: "border-accent/50 bg-accent/15 text-accent",
+};
+
+function TierCard({ account }: { account: AoAccount }) {
+  const { points, tier, nextTier } = account;
+  const progress = nextTier
+    ? Math.min(100, Math.max(0, (points / nextTier.minPoints) * 100))
+    : 100;
+
+  return (
+    <Card className="gap-2 py-5">
+      <CardHeader className="px-5">
+        <CardDescription className="text-[10px] tracking-widest uppercase font-mono">
+          contribution tier
+        </CardDescription>
+        <CardTitle>
+          <Badge
+            variant="outline"
+            className={cn(
+              "font-mono text-xs px-2",
+              CONTRIB_TIER_STYLES[tier.name] ?? CONTRIB_TIER_STYLES.lurker
+            )}
+          >
+            {tier.name}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-5 space-y-3">
+        <div className="space-y-1.5 text-xs font-mono">
+          <div className="flex items-baseline justify-between">
+            <span className="text-muted-foreground">lifetime points</span>
+            <span className="text-foreground">{points}</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-muted-foreground">daily refill</span>
+            <span className="text-foreground">{tier.dailyRefill}</span>
+          </div>
+        </div>
+        {nextTier ? (
+          <div>
+            <div className="h-1 rounded-full bg-secondary overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              {nextTier.pointsNeeded}{" "}
+              {nextTier.pointsNeeded === 1 ? "point" : "points"} to{" "}
+              {nextTier.name} ({nextTier.dailyRefill}/day)
+            </p>
+          </div>
+        ) : (
+          <p className="text-[10px] text-muted-foreground">
+            max tier — the refill goes no higher
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function BalanceSection({ token }: { token: string }) {
   const account = useQuery(thalamus.getAoAccount, { token });
 
   return (
     <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-      <Card className="gap-2 py-5 self-start">
-        <CardHeader className="px-5">
-          <CardDescription className="text-[10px] tracking-widest uppercase font-mono">
-            credit balance
-          </CardDescription>
-          <CardTitle className="text-4xl font-mono text-primary terminal-glow">
-            {account === undefined ? (
-              <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
-            ) : account === null ? (
-              "—"
-            ) : (
-              account.balance
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-5">
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            {account === null
-              ? "Your account initializes with 10 credits the first time you create an API key."
-              : "Balances below 10 refill back to 10 daily. Credits earned from learnings stack on top."}
-          </p>
-        </CardContent>
-      </Card>
+      <div className="space-y-4 self-start">
+        <Card className="gap-2 py-5">
+          <CardHeader className="px-5">
+            <CardDescription className="text-[10px] tracking-widest uppercase font-mono">
+              credit balance
+            </CardDescription>
+            <CardTitle className="text-4xl font-mono text-primary terminal-glow">
+              {account === undefined ? (
+                <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+              ) : account === null ? (
+                "—"
+              ) : (
+                account.balance
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              {!account
+                ? "Your account initializes with 10 credits the first time you create an API key."
+                : `Balances below ${account.tier.dailyRefill} refill back to ${account.tier.dailyRefill} daily. Credits earned from learnings stack on top.`}
+            </p>
+          </CardContent>
+        </Card>
+
+        {account ? <TierCard account={account} /> : null}
+      </div>
 
       <Card className="gap-3 py-5">
         <CardHeader className="px-5">

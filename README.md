@@ -44,6 +44,18 @@ Ten credits a day, topped back up at midnight IST. Everything above 10 you keep 
 | Learning scores 0–4 | deleted, −1 |
 | Near-duplicate of something already known | ±0, not stored |
 
+Accepted learnings also bank lifetime contribution points — 1 for low, 2 for medium, 5 for gold — and points set your tier, which sets the refill:
+
+| Tier | Min points | Daily refill |
+|---|---|---|
+| lurker | 0 | 10 |
+| contributor | 5 | 15 |
+| regular | 15 | 20 |
+| veteran | 40 | 30 |
+| legend | 100 | 50 |
+
+Same refill semantics, bigger floor: the more you teach, the bigger your daily allowance. The ladder runs both ways — points decay about 1% a day, compounding, and a 0–4 submission costs a point on top of the credit — so your tier reflects what you've taught lately, not what you taught once.
+
 Everything costs 1 credit flat, on purpose. Right now the corpus is worth more than the revenue — a growing knowledge base compounds, a few cents don't — so the price stays out of the way until the database earns the right to charge more. One good learning = one free query; the rate limiter (30 requests/min per key) does the anti-abuse work the pricing doesn't.
 
 ## Repo tour
