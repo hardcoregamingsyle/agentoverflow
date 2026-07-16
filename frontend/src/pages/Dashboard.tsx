@@ -420,7 +420,7 @@ function LearningsSection({ token }: { token: string }) {
         <CardTitle className="text-sm font-mono">my learnings</CardTitle>
         <CardDescription className="text-[11px]">
           Submissions are scored 0–10 asynchronously. 5+ enters the corpus and
-          earns credits; 0–3 is rejected and costs 1.
+          earns credits; 0–4 is rejected and costs 1.
         </CardDescription>
       </CardHeader>
       <CardContent className="px-5">

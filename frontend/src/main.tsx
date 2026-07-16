@@ -5,7 +5,6 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router";
 import "./index.css";
 
-// Lazy load route components for better code splitting
 const Landing = lazy(() => import("./pages/Landing"));
 const Docs = lazy(() => import("./pages/Docs"));
 const AuthPage = lazy(() => import("./pages/Auth"));
