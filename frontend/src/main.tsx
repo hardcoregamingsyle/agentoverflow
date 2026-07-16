@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/sonner";
+import { CONVEX_URL } from "@/lib/convexUrl";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { StrictMode, Component, lazy, Suspense, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -55,25 +56,9 @@ function RouteLoading() {
   );
 }
 
-// A build without VITE_CONVEX_URL would otherwise throw before React mounts,
-// leaving a silent blank page on every route. Fail loudly instead.
-const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
-const convex = convexUrl ? new ConvexReactClient(convexUrl) : null;
-
-// eslint-disable-next-line react-refresh/only-export-components -- app entry point; HMR component boundaries don't apply here
-function ConfigError() {
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0d0d0d", color: "#e2e8f0", fontFamily: "system-ui", padding: 24, textAlign: "center" }}>
-      <div>
-        <h1 style={{ fontSize: 18, marginBottom: 8 }}>Deployment configuration error</h1>
-        <p style={{ fontSize: 14, opacity: 0.7 }}>VITE_CONVEX_URL was not set when this build was produced.<br />Set it in the build environment and redeploy.</p>
-      </div>
-    </div>
-  );
-}
+const convex = new ConvexReactClient(CONVEX_URL);
 
 createRoot(document.getElementById("root")!).render(
-  !convex ? <ConfigError /> :
   <StrictMode>
     <ConvexProvider client={convex}>
       <BrowserRouter>

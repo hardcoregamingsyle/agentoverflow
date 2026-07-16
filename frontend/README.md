@@ -54,9 +54,9 @@ in here, and the root `wrangler.toml` tells Pages the output lives in
    pick this repo.
 2. Build command: `bun run build`. Leave root directory and output directory
    alone — `wrangler.toml` at the repo root carries the output path.
-3. Add the env var `VITE_CONVEX_URL` (Production + Preview). A build without
-   it doesn't blank-page — it renders a config-error screen — but it also
-   doesn't work, so set it.
+3. `VITE_CONVEX_URL` is optional: builds default to the production deployment
+   (`src/lib/convexUrl.ts`). Set the env var only to point a build somewhere
+   else — local dev against a different deployment, for instance.
 4. `public/_redirects` already carries the SPA fallback (every route →
    `/index.html`), so deep links like `/dashboard` survive refreshes.
 5. Custom domain: Pages project → **Custom domains**. If OAuth should land

@@ -5,6 +5,7 @@
  * makeFunctionReference.
  */
 import { makeFunctionReference } from "convex/server";
+import { CONVEX_URL } from "./convexUrl";
 
 // ── Auth (thalamus custom-token auth — NOT @convex-dev/auth) ──────────────
 
@@ -178,7 +179,4 @@ export const playgroundSearch = makeFunctionReference<
 // ── Derived URLs ────────────────────────────────────────────────────────────
 
 /** The Convex HTTP-router origin (agents hit `${AO_API_BASE}/ao/v1/*`). */
-export const AO_API_BASE = (
-  (import.meta.env.VITE_CONVEX_URL as string | undefined) ??
-  "https://your-deployment.convex.cloud"
-).replace(".convex.cloud", ".convex.site");
+export const AO_API_BASE = CONVEX_URL.replace(".convex.cloud", ".convex.site");
