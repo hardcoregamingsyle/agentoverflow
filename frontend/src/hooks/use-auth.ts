@@ -30,11 +30,9 @@ export function useAuth() {
       const code = formData.get("code") as string | null;
 
       if (!code) {
-        // Step 1: Send OTP
         await sendOtpAction({ email });
         return { started: true };
       } else {
-        // Step 2: Verify OTP
         const result = await verifyOtpAction({ email, code });
         localStorage.setItem(SESSION_KEY, result.token);
         setToken(result.token);
@@ -49,14 +47,14 @@ export function useAuth() {
       try {
         await signOutMutation({ token });
       } catch {
-        // ignore
+        // token may already be dead server-side; local sign-out proceeds anyway
       }
     }
     localStorage.removeItem(SESSION_KEY);
     setToken(null);
   };
 
-  // Listen for storage changes (multi-tab support)
+  // cross-tab sync: signing in/out in one tab updates every other tab
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === SESSION_KEY) {

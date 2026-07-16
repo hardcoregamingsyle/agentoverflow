@@ -78,7 +78,7 @@ export interface AoAccount {
 }
 
 export type LearningStatus = "pending" | "scored" | "rejected" | "duplicate";
-export type LearningTier = "quarantine" | "low" | "medium" | "gold";
+export type LearningTier = "low" | "medium" | "gold";
 
 export interface AoLearning {
   id: string;
