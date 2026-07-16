@@ -132,7 +132,7 @@ In the thalamus Convex dashboard → Settings → Environment Variables, set:
 | -------------------- | -------------------------------------------- |
 | `AO_VM_URL`          | `http://<VM_IP>:8080`                        |
 | `AO_INTERNAL_SECRET` | same value as in `deploy/.env`               |
-| `AO_FRONTEND_URL`    | the AgentOverflow Vercel URL (e.g. `https://agentoverflow.vercel.app`) |
+| `AO_FRONTEND_URL`    | the AgentOverflow Pages URL (e.g. `https://agentoverflow.pages.dev`) |
 
 ## 10. Smoke tests
 

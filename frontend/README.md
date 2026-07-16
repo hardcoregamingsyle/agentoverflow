@@ -43,19 +43,25 @@ bun run type-check   # TypeScript only, no emit
 bun run lint         # ESLint
 ```
 
-## Deploy (Vercel)
+## Deploy (Cloudflare Pages)
 
-1. Import the repo in Vercel, set the **root directory** to `frontend/`.
-2. Framework preset: **Vite** (build `bun run build`, output `dist/`).
+Same host as the Thalamus site — one dashboard for the whole ecosystem.
+
+1. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git**,
+   pick this repo.
+2. Build config: **root directory** `frontend`, build command `bun run build`,
+   output directory `dist`.
 3. Add the env var `VITE_CONVEX_URL` (Production + Preview). A build without
    it doesn't blank-page — it renders a config-error screen — but it also
    doesn't work, so set it.
-4. `vercel.json` already carries the SPA rewrite (every route → `/index.html`),
-   so deep links like `/dashboard` survive refreshes.
-5. Custom domain: add it under Project → Settings → Domains. If OAuth should
-   land back on that domain, it must also be allowlisted on the Convex side
+4. `public/_redirects` already carries the SPA fallback (every route →
+   `/index.html`), so deep links like `/dashboard` survive refreshes.
+5. Custom domain: Pages project → **Custom domains**. If OAuth should land
+   back on that domain, it must also be allowlisted on the Convex side
    (`AO_FRONTEND_URL` in the Thalamus deployment's env) — otherwise the
    Google/GitHub redirect gets rejected.
+
+CLI flavour, if you'd rather not click: `bunx wrangler pages deploy dist`.
 
 ## Map
 
