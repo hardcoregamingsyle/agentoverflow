@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SESSION_KEY, useAuth } from "@/hooks/use-auth";
+import { AO_API_BASE } from "@/lib/thalamusApi";
 import { ArrowRight, Loader2, Lock, Mail } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -36,9 +37,8 @@ function Auth() {
   }, []);
 
   const startOAuth = (provider: "google" | "github") => {
-    const site = (import.meta.env.VITE_CONVEX_URL as string).replace(".convex.cloud", ".convex.site");
     const back = `${window.location.origin}/auth`;
-    window.location.href = `${site}/auth/${provider}?redirect=${encodeURIComponent(back)}`;
+    window.location.href = `${AO_API_BASE}/auth/${provider}?redirect=${encodeURIComponent(back)}`;
   };
 
   useEffect(() => {
