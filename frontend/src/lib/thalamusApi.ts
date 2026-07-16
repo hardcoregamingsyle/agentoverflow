@@ -72,8 +72,26 @@ export interface LedgerEntry {
   createdAt: number;
 }
 
+/** Contribution tier the account currently sits at. */
+export interface AoTier {
+  name: string;
+  dailyRefill: number;
+}
+
+/** The next rung on the ladder; null once the account is at legend. */
+export interface AoNextTier {
+  name: string;
+  dailyRefill: number;
+  minPoints: number;
+  pointsNeeded: number;
+}
+
 export interface AoAccount {
   balance: number;
+  /** Lifetime contribution points from accepted learnings. */
+  points: number;
+  tier: AoTier;
+  nextTier: AoNextTier | null;
   ledger: LedgerEntry[];
 }
 

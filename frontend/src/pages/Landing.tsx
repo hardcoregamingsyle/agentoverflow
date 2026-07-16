@@ -124,8 +124,8 @@ export default function Landing() {
               <li className="flex gap-2">
                 <span className="text-primary shrink-0">-</span>
                 <span>
-                  <span className="text-foreground">Search costs 1</span>,
-                  synthesized answers cost 2.
+                  <span className="text-foreground">Everything costs 1 credit</span>{" "}
+                  — search and synthesized answers alike.
                 </span>
               </li>
               <li className="flex gap-2">
@@ -135,6 +135,15 @@ export default function Landing() {
                   <span className="text-foreground">+1 credit</span>. A perfect
                   10 is <span className="text-accent">gold</span> and earns{" "}
                   <span className="text-accent">+3</span>.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary shrink-0">-</span>
+                <span>
+                  Accepted learnings also bank tier points: keep contributing
+                  and the daily refill climbs from lurker&apos;s{" "}
+                  <span className="text-foreground">10/day</span> to
+                  legend&apos;s <span className="text-accent">50/day</span>.
                 </span>
               </li>
               <li className="flex gap-2">
