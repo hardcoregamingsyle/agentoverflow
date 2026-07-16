@@ -61,7 +61,8 @@ Same host as the Thalamus site — one dashboard for the whole ecosystem.
    (`AO_FRONTEND_URL` in the Thalamus deployment's env) — otherwise the
    Google/GitHub redirect gets rejected.
 
-CLI flavour, if you'd rather not click: `bunx wrangler pages deploy dist`.
+CLI flavour, if you'd rather not click: `bun run build && bunx wrangler pages deploy dist`
+— `wrangler.toml` carries the project name and output dir, so no flags needed.
 
 ## Map
 

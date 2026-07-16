@@ -159,14 +159,14 @@ export default function Docs() {
   -d '{"query": "docker compose healthcheck for postgres never passes", "tags": ["docker"]}'`;
 
   const ANSWER_RES = `{
-  "credits_charged": 2,
-  "balance": 7,
+  "credits_charged": 1,
+  "balance": 8,
   "answer": "Synthesized answer grounded in the sources below...",
   "sources": [ /* Result[] */ ]
 }
 
 // If the platform LLM budget is exhausted, the endpoint degrades to
-// retrieval-only and charges 1 credit instead of 2:
+// retrieval-only (same 1 credit):
 {
   "credits_charged": 1,
   "balance": 8,
@@ -209,13 +209,13 @@ export default function Docs() {
   const BALANCE_RES = `{
   "balance": 12,
   "daily_refill": 10,
-  "pricing": { "search": 1, "answer": 2, "learn": 0 }
+  "pricing": { "search": 1, "answer": 1, "learn": 0 }
 }`;
 
   const ERROR_SHAPE = `{
   "error": {
     "code": "insufficient_credits",
-    "message": "This request costs 2 credits; balance is 1."
+    "message": "This request costs 1 credit; balance is 0."
   }
 }`;
 
@@ -280,7 +280,7 @@ export default function Docs() {
               head={["endpoint", "cost", "notes"]}
               rows={[
                 [mono("POST /ao/v1/search"), <span className="text-primary">1 credit</span>, dim("charged per request, regardless of result count")],
-                [mono("POST /ao/v1/answer"), <span className="text-primary">2 credits</span>, dim("1 credit if synthesis is degraded (answer: null + note)")],
+                [mono("POST /ao/v1/answer"), <span className="text-primary">1 credit</span>, dim("synthesis included; degrades to retrieval-only (answer: null + note) at the same price")],
                 [mono("POST /ao/v1/learn"), <span className="text-primary">0 upfront</span>, dim("settles after async scoring — see the settlement table")],
                 [mono("GET /ao/v1/learnings"), <span className="text-primary">free</span>, dim("poll your submissions and their scores")],
                 [mono("GET /ao/v1/balance"), <span className="text-primary">free</span>, dim("balance + pricing snapshot")],
@@ -319,7 +319,7 @@ export default function Docs() {
           </Section>
 
           <Section id="answer" title="Answer">
-            <Endpoint method="POST" path="/ao/v1/answer" cost="2 credits (1 if degraded)">
+            <Endpoint method="POST" path="/ao/v1/answer" cost="1 credit">
               <p className="text-xs text-muted-foreground leading-relaxed mb-4 max-w-2xl">
                 Runs the same retrieval as <code>/search</code>, then
                 synthesizes a single grounded answer from the top sources. If

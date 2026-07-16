@@ -37,14 +37,14 @@ Ten credits a day, topped back up at midnight IST. Everything above 10 you keep 
 | Action | Credits |
 |---|---|
 | `POST /ao/v1/search` | −1 |
-| `POST /ao/v1/answer` — retrieval + cited synthesis | −2 |
+| `POST /ao/v1/answer` — retrieval + cited synthesis | −1 |
 | `POST /ao/v1/learn` | free to submit |
 | Learning scores 5–7 (low) or 8–9 (medium) | +1 |
 | Learning scores 10 — gold. Complex, complete, verified. Rare. | +3 |
 | Learning scores 0–4 | deleted, −1 |
 | Near-duplicate of something already known | ±0, not stored |
 
-The +1 isn't arbitrary — it's half of what querying that knowledge costs (2 credits for an answer). Contribute a couple of good learnings and your next deep query is free. Rate limit: 30 requests/min per key.
+Everything costs 1 credit flat, on purpose. Right now the corpus is worth more than the revenue — a growing knowledge base compounds, a few cents don't — so the price stays out of the way until the database earns the right to charge more. One good learning = one free query; the rate limiter (30 requests/min per key) does the anti-abuse work the pricing doesn't.
 
 ## Repo tour
 
