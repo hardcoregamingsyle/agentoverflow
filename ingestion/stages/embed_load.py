@@ -15,9 +15,12 @@ scored shards in batches of embed.batch_size:
 Rescore overrides (state/rescore_overrides.jsonl) are applied when present:
 the override replaces the heuristic score and the tier is recomputed.
 
-HNSW indexing is disabled (indexing_threshold=0) for the duration of the
-bulk load — on collection creation and again on every (re)start against an
-existing collection — and restored to 20000 when the stage finishes.
+HNSW indexing stays ENABLED (indexing_threshold=20000) even during the bulk
+load. The collection serves live searches while it fills, and an unindexed
+collection is an exhaustive scan — fine at 30k points, seconds per query at
+3.7M. Embedding tops out around 15 docs/s on CPU, far below what the
+optimizer can index, so the index costs the load almost nothing. Every
+(re)start re-asserts the threshold in case an older run left it at 0.
 
 Resume: state/embed_load.json lists finished shards; within a shard, both
 Qdrant upserts and ON CONFLICT DO NOTHING inserts are idempotent, so an
@@ -42,8 +45,10 @@ from ..state import load_state, save_state
 # per-chunk log line) shows every few minutes, not once per 100k shard.
 EMBED_CHUNK = 2048
 
-# Qdrant's default optimizer threshold (in kB of vectors per segment); the
-# stage sets it to 0 while bulk-loading and restores this value at the end.
+# Qdrant's default optimizer threshold (in kB of vectors per segment). Kept
+# at the default even while bulk-loading: searches run against this collection
+# the whole time, and 0 (the classic bulk-load trick) would leave them
+# exhaustive-scanning millions of points for the length of the load.
 INDEXING_THRESHOLD = 20000
 
 _PG_SCHEMA = """
@@ -83,8 +88,8 @@ def run(cfg: Config) -> None:
         # the 1.4 GB quantized set in memory, so the corpus serves from an 8 GB
         # box (the fp32 originals stay on disk, rarely read). Payload on disk
         # too, to keep serving RAM small. The bulk embed is CPU-bound anyway,
-        # so per-batch disk writes aren't the limiter. indexing_threshold=0
-        # disables HNSW indexing during load; restored at the end.
+        # so per-batch disk writes aren't the limiter — and neither is HNSW
+        # upkeep, which is why indexing stays on (see module docstring).
         client.create_collection(
             collection_name=cfg.qdrant_collection,
             vectors_config=qm.VectorParams(
@@ -93,19 +98,22 @@ def run(cfg: Config) -> None:
                 scalar=qm.ScalarQuantizationConfig(
                     type=qm.ScalarType.INT8, always_ram=True)),
             on_disk_payload=True,
-            optimizers_config=qm.OptimizersConfigDiff(indexing_threshold=0),
+            optimizers_config=qm.OptimizersConfigDiff(
+                indexing_threshold=INDEXING_THRESHOLD),
         )
         print(f"[embed-load] created collection {cfg.qdrant_collection} "
-              "(indexing disabled for bulk load)", flush=True)
+              f"(indexing_threshold={INDEXING_THRESHOLD})", flush=True)
     else:
-        # Resume on an existing collection: same deal, indexing off while
-        # loading, restored at stage end.
+        # Resume on an existing collection: re-assert the threshold so a
+        # collection created by an older run (which zeroed it for the load)
+        # starts indexing instead of exhaustive-scanning every live search.
         client.update_collection(
             collection_name=cfg.qdrant_collection,
-            optimizers_config=qm.OptimizersConfigDiff(indexing_threshold=0),
+            optimizers_config=qm.OptimizersConfigDiff(
+                indexing_threshold=INDEXING_THRESHOLD),
         )
-        print(f"[embed-load] indexing disabled on {cfg.qdrant_collection} "
-              "for bulk load (indexing_threshold=0)", flush=True)
+        print(f"[embed-load] indexing enabled on {cfg.qdrant_collection} "
+              f"(indexing_threshold={INDEXING_THRESHOLD})", flush=True)
 
     pg = psycopg.connect(cfg.pg_dsn)
     for stmt in _PG_SCHEMA.split(";"):
@@ -178,13 +186,6 @@ def run(cfg: Config) -> None:
         save_state(state_path, state)
         print(f"[embed-load] {shard.name} done ({total:,} docs this run)", flush=True)
     pg.close()
-    client.update_collection(
-        collection_name=cfg.qdrant_collection,
-        optimizers_config=qm.OptimizersConfigDiff(
-            indexing_threshold=INDEXING_THRESHOLD),
-    )
-    print(f"[embed-load] indexing re-enabled on {cfg.qdrant_collection} "
-          f"(indexing_threshold={INDEXING_THRESHOLD})", flush=True)
     print("[embed-load] done", flush=True)
 
 
