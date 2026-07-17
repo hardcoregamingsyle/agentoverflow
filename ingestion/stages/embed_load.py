@@ -36,6 +36,10 @@ from ..scoring import tier_for_score
 from ..shards import iter_jsonl_gz
 from ..state import load_state, save_state
 
+# Docs per model.embed() call. Big enough that the parallel=0 worker-pool
+# spawn amortizes; small enough to keep a chunk's rows in memory.
+EMBED_CHUNK = 8192
+
 # Qdrant's default optimizer threshold (in kB of vectors per segment); the
 # stage sets it to 0 while bulk-loading and restores this value at the end.
 INDEXING_THRESHOLD = 20000
@@ -106,18 +110,21 @@ def run(cfg: Config) -> None:
     for shard in shards:
         if shard.name in done:
             continue
-        for batch in _batches(iter_jsonl_gz(shard), cfg.embed_batch_size):
-            rows = [_prepare(rec, overrides, cfg) for rec in batch]
-            vectors = model.embed([r["embed_text"] for r in rows],
-                                  batch_size=cfg.embed_batch_size)
+        # Embedding is fast (~170 docs/s); the bottleneck was 256-row writes,
+        # one Qdrant round-trip + one fsync'd Postgres commit each, against a
+        # network disk. Batch the whole chunk into a single upsert + single
+        # commit — ~32x fewer round-trips. Per-chunk logging shows the real
+        # rate without waiting for a full 100k shard.
+        for chunk in _batches(iter_jsonl_gz(shard), EMBED_CHUNK):
+            rows = [_prepare(rec, overrides, cfg) for rec in chunk]
             points = [
                 qm.PointStruct(id=r["point_id"], vector=[float(x) for x in vec],
                                payload=r["payload"])
-                for r, vec in zip(rows, vectors)
+                for r, vec in zip(rows, model.embed(
+                    [r["embed_text"] for r in rows], batch_size=cfg.embed_batch_size))
             ]
-            # wait=False so the next batch embeds while Qdrant applies this one
-            # — the write hits the WAL immediately, so a crash still replays it.
-            # Blocking per batch left ~15 cores idle; overlapping fills them.
+            # wait=False overlaps the write with the next chunk's embed; the WAL
+            # keeps it durable, so an interrupted shard still replays.
             client.upsert(collection_name=cfg.qdrant_collection, points=points, wait=False)
             with pg.cursor() as cur:
                 cur.executemany(
@@ -134,10 +141,11 @@ def run(cfg: Config) -> None:
                     )
             pg.commit()
             total += len(rows)
+            print(f"[embed-load] {shard.name}: {total:,} docs this run", flush=True)
         done.add(shard.name)
         state["done_shards"] = sorted(done)
         save_state(state_path, state)
-        print(f"[embed-load] {shard.name} loaded ({total:,} docs this run)", flush=True)
+        print(f"[embed-load] {shard.name} done ({total:,} docs this run)", flush=True)
     pg.close()
     client.update_collection(
         collection_name=cfg.qdrant_collection,
