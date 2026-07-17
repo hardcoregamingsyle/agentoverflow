@@ -154,6 +154,24 @@ class SecretHeaderTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
+    def test_non_ascii_secret_is_401_not_500(self):
+        # Raw non-ASCII header bytes (what a real client can always send —
+        # starlette decodes them latin-1 into a non-ASCII str) used to hit
+        # str-mode compare_digest, which raises TypeError → 500. The bytes
+        # comparison must keep this a clean auth failure.
+        response = self.client.get(
+            "/internal/health",
+            headers={b"X-AO-Internal-Secret": "sécret".encode("utf-8")},
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_auto_docs_are_disabled(self):
+        # /docs, /redoc and /openapi.json don't inherit the app dependency —
+        # the only safe setting for an internal API is off.
+        for path in ["/docs", "/redoc", "/openapi.json"]:
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 404, path)
+
     def test_invalid_search_body_is_422(self):
         response = self.client.post(
             "/internal/search",

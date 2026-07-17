@@ -30,13 +30,23 @@ if not _SECRET:
 def require_secret(
     x_ao_internal_secret: str = Header(default="", alias="X-AO-Internal-Secret"),
 ) -> None:
-    if not secrets.compare_digest(x_ao_internal_secret, _SECRET):
+    # Compare as bytes: compare_digest on str raises TypeError for non-ASCII
+    # input, which would turn a garbage header into an unauthenticated 500
+    # instead of the 401 it deserves.
+    header = x_ao_internal_secret.encode("utf-8", "surrogateescape")
+    if not secrets.compare_digest(header, _SECRET.encode("utf-8")):
         raise HTTPException(status_code=401, detail="invalid or missing X-AO-Internal-Secret")
 
 
+# Auto-docs are disabled: this API is internal-only but listens on an exposed
+# port, and FastAPI's /docs, /redoc and /openapi.json routes do NOT inherit
+# app-level dependencies — they'd serve the full API schema to anyone.
 app = FastAPI(
     title="AgentOverflow internal API",
     dependencies=[Depends(require_secret)],
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 
