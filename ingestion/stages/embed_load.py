@@ -115,7 +115,10 @@ def run(cfg: Config) -> None:
                                payload=r["payload"])
                 for r, vec in zip(rows, vectors)
             ]
-            client.upsert(collection_name=cfg.qdrant_collection, points=points, wait=True)
+            # wait=False so the next batch embeds while Qdrant applies this one
+            # — the write hits the WAL immediately, so a crash still replays it.
+            # Blocking per batch left ~15 cores idle; overlapping fills them.
+            client.upsert(collection_name=cfg.qdrant_collection, points=points, wait=False)
             with pg.cursor() as cur:
                 cur.executemany(
                     "INSERT INTO documents (doc_id, title, problem, solution, score, tier, source, url) "
