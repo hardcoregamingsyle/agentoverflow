@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://befitting-wildebeest-866.convex.site/ao/sitemap.xml

@@ -12,6 +12,7 @@ const AuthPage = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Playground = lazy(() => import("./pages/Playground"));
 const Admin = lazy(() => import("./pages/Admin"));
+const Question = lazy(() => import("./pages/Question"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Without a boundary, a failed lazy-route chunk (typical after a deploy purges
@@ -72,6 +73,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/playground" element={<Playground />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/q/:docId" element={<Question />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

@@ -1,4 +1,5 @@
 import { Layout } from "@/components/Layout";
+import { SolutionBody } from "@/components/SolutionBody";
 import { TierBadge } from "@/components/TierBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,44 +19,26 @@ import {
   Loader2,
   Search,
 } from "lucide-react";
-import { Fragment, useState } from "react";
-import { Navigate } from "react-router";
+import { useState } from "react";
+import { Link, Navigate } from "react-router";
 import { toast } from "sonner";
-
-/* Markdown-ish rendering: split on ``` fences, render code vs prose. */
-function SolutionBody({ text }: { text: string }) {
-  const parts = text.split(/```(?:[a-zA-Z0-9_-]*\n)?/);
-  return (
-    <div className="space-y-2">
-      {parts.map((part, i) =>
-        i % 2 === 1 ? (
-          <pre
-            key={i}
-            className="rounded-md border border-border bg-[oklch(0.08_0_0)] p-3 overflow-x-auto text-[11px] leading-relaxed font-mono text-foreground/90"
-          >
-            <code>{part.replace(/\n$/, "")}</code>
-          </pre>
-        ) : part.trim() ? (
-          <p key={i} className="text-xs text-foreground/85 leading-relaxed whitespace-pre-wrap">
-            {part.trim()}
-          </p>
-        ) : (
-          <Fragment key={i} />
-        )
-      )}
-    </div>
-  );
-}
 
 function ResultCard({ result }: { result: SearchResult }) {
   const [open, setOpen] = useState(false);
 
   return (
     <Card className="gap-0 py-0 overflow-hidden">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen((v) => !v)}
-        className="w-full text-left px-4 sm:px-5 py-4 hover:bg-secondary/30 transition-colors"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((v) => !v);
+          }
+        }}
+        className="w-full text-left px-4 sm:px-5 py-4 hover:bg-secondary/30 transition-colors cursor-pointer"
       >
         <div className="flex items-start gap-3">
           <span className="mt-0.5 text-muted-foreground shrink-0">
@@ -74,7 +57,15 @@ function ResultCard({ result }: { result: SearchResult }) {
                 {result.source}
               </span>
             </div>
-            <h3 className="text-sm font-semibold leading-snug">{result.title}</h3>
+            <h3 className="text-sm font-semibold leading-snug">
+              <Link
+                to={`/q/${result.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="hover:text-primary hover:underline transition-colors"
+              >
+                {result.title}
+              </Link>
+            </h3>
             {!open && (
               <p className="mt-1.5 text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
                 {result.snippet}
@@ -91,7 +82,7 @@ function ResultCard({ result }: { result: SearchResult }) {
             )}
           </div>
         </div>
-      </button>
+      </div>
       {open && (
         <CardContent className="px-4 sm:px-5 pb-4 pt-0">
           <div className="ml-6 border-l border-border pl-4 space-y-3">
