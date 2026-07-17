@@ -26,6 +26,7 @@ interrupted shard is simply replayed.
 
 from __future__ import annotations
 
+import gc
 import json
 import os
 from collections.abc import Iterable, Iterator
@@ -115,11 +116,21 @@ def run(cfg: Config) -> None:
     # AO_EMBED_CUDA=1 (with fastembed-gpu installed) runs the model on a GPU —
     # ~1000x the CPU rate, used for the one-time bulk load on a GPU box. The
     # ONNX model is identical to the CPU path, so the query side stays consistent.
-    if os.environ.get("AO_EMBED_CUDA") == "1":
-        model = TextEmbedding(cfg.embed_model, cuda=True)
-        print("[embed-load] using CUDA execution provider", flush=True)
-    else:
-        model = TextEmbedding(cfg.embed_model)
+    use_cuda = os.environ.get("AO_EMBED_CUDA") == "1"
+
+    def make_model():
+        if use_cuda:
+            print("[embed-load] using CUDA execution provider", flush=True)
+            return TextEmbedding(cfg.embed_model, cuda=True)
+        return TextEmbedding(cfg.embed_model)
+
+    model = make_model()
+    # onnxruntime's CPU allocator arena grows and never shrinks; on a small box
+    # it climbs past RAM and the OOM killer takes the process. Rebuilding the
+    # model every N chunks frees the arena. The GPU path doesn't need this, but
+    # it's cheap there too.
+    chunks_since_reload = 0
+    RELOAD_EVERY = 20
     total = 0
     for shard in shards:
         if shard.name in done:
@@ -156,6 +167,12 @@ def run(cfg: Config) -> None:
             pg.commit()
             total += len(rows)
             print(f"[embed-load] {shard.name}: {total:,} docs this run", flush=True)
+            chunks_since_reload += 1
+            if chunks_since_reload >= RELOAD_EVERY:
+                del model
+                gc.collect()
+                model = make_model()
+                chunks_since_reload = 0
         done.add(shard.name)
         state["done_shards"] = sorted(done)
         save_state(state_path, state)
