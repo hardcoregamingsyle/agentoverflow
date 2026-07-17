@@ -130,7 +130,7 @@ def run(cfg: Config) -> None:
     # model every N chunks frees the arena. The GPU path doesn't need this, but
     # it's cheap there too.
     chunks_since_reload = 0
-    RELOAD_EVERY = 20
+    RELOAD_EVERY = 5
     total = 0
     for shard in shards:
         if shard.name in done:
