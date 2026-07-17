@@ -21,9 +21,10 @@ Same gate, same credentials as the Thalamus `/admin` panel — one deployment, o
 | Remove a learning | Pulls it out of the corpus (`DELETE /internal/item/{doc_id}` on the VM; a 404 there is tolerated) and marks the row `rejected` with rationale "Removed from the corpus by admin." | `deleteLearning` (action) → `adminMarkRemoved` |
 | Users & tiers | Every AO user, top contributors first (sorted by points, then balance; capped at 200): email, name, balance, points, tier, daily refill. | `adminUsers` (query) |
 | Credit adjustment | Manual grant or deduction for a user. The balance floors at zero and the movement lands in `aoCreditLedger` with reason `admin`, like everything else. | `adjustCredits` (action) → `adminAdjustCredits` |
+| Tier-increase applications | Pending applications first, then recent history: submitter email, current tier / effective refill / rate limit, use case, expected daily volume. Approve with a granted daily refill and/or rate limit (at least one required; values rounded) — written to `users.aoCustomRefill` / `users.aoCustomRateLimit`, honored by the next refill cron — or reject with a note. Only `pending` requests can be resolved. | `adminLimitRequests` (query), `resolveLimitRequest` (mutation) |
 
 ## Data Sources
 
-The panel reads only `ao*` tables and the shared `users` table: `aoLearnings`, `aoApiKeys`, `aoCreditLedger`, `aoUsage`, `aoDailyActiveUsers`, plus `users.aoCredits` / `users.aoContribPoints`. Tier names come from the same `contribTierFor` / `CONTRIB_TIERS` ladder the economy uses ([economy.md](./economy.md)).
+The panel reads only `ao*` tables and the shared `users` table: `aoLearnings`, `aoApiKeys`, `aoCreditLedger`, `aoUsage`, `aoDailyActiveUsers`, `aoLimitRequests`, plus `users.aoCredits` / `users.aoContribPoints` / `users.aoCustomRefill` / `users.aoCustomRateLimit`. Tier names come from the same `contribTierFor` / `CONTRIB_TIERS` ladder the economy uses ([economy.md](./economy.md)).
 
 Scale note (from the code): the stats queries scan with bounded pagination — fine at current scale, revisit with counters past ~15k users.

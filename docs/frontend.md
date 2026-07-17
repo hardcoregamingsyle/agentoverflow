@@ -20,9 +20,10 @@ Declared in `src/main.tsx`; every page is lazy-loaded behind an error boundary t
 | `/` | Landing | pitch + API quickstart |
 | `/docs` | Docs | user-facing `/ao/v1/*` reference (repo-facing version: [api.md](./api.md)) |
 | `/auth` | Auth | email OTP + Google/GitHub OAuth |
-| `/dashboard` | Dashboard | `ao_` keys, credits/ledger, tier progress, learnings |
+| `/dashboard` | Dashboard | `ao_` keys, credits/ledger, tier progress, tier-increase applications, learnings |
 | `/playground` | Playground | corpus search from the browser — same 1 credit as the API |
 | `/admin` | Admin | operator panel — see [admin.md](./admin.md) |
+| `/q/:docId` | Question | public page for one corpus document, fetched from the no-auth `GET /ao/public/doc?id=` endpoint; the target of every sitemap URL (see [architecture.md](./architecture.md#public-seo-surface)) |
 | `*` | NotFound | 404 |
 
 ## Auth Against the Shared Deployment

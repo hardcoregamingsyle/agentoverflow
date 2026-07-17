@@ -8,6 +8,7 @@ All backend code referenced below is in the Thalamus repo under `src/convex/` un
 
 - **First touch**: creating your first `ao_` key seeds the balance at 10 (`insertApiKey`); `charge()` also treats an unset balance as 10.
 - **Spending**: `search` −1, `answer` −1, `learn` free to submit (`COST_SEARCH` / `COST_ANSWER` in `agentoverflow.ts`). Flat 1 credit on purpose — the corpus currently matters more than the revenue.
+- **MCP is free**: the same `search`/`answer` called through `/ao/mcp` charge 0 — adoption is worth more than the credits. A zero-credit call still goes through `charge()`: no money moves and nothing hits the ledger, but the `aoUsage` row is written and the rate limit is enforced, so free never means unlimited.
 - **Refunds**: a search/answer that never happened (VM down/unconfigured) is refunded before the 503 goes out.
 - **Earning**: submit learnings that score 5+. That's the only way above your daily refill.
 
@@ -45,6 +46,15 @@ Points buy a bigger daily refill (same semantics, higher floor):
 
 Source of truth: `CONTRIB_TIERS` in `agentoverflow.ts`. Points are stored as a float and floored for display.
 
+## Tier-Increase Applications
+
+The ladder is the organic path; applications are the fast lane. From the dashboard a user files **one pending application at a time** — a use case (20–2000 chars) plus expected daily volume (`submitLimitRequest`, stored in `aoLimitRequests`; history via `myLimitRequests`). An admin approves it with a granted daily refill and/or rate limit, or rejects it with a note (`resolveLimitRequest` in `agentoverflowAdmin.ts`). Approval writes the overrides straight onto the user: `users.aoCustomRefill` and `users.aoCustomRateLimit`.
+
+- **Effective refill** = max(ladder-tier refill, granted refill) — `effectiveRefill` in `agentoverflow.ts`. A grant is a floor, not a replacement; climbing the ladder past it still counts.
+- **Rate limit**: the default 30/min is replaced outright by the granted number.
+
+The daily refill cron and `GET /ao/v1/balance` both report the effective values.
+
 ## Decay
 
 Points decay **~1% per day, compounding** (`POINTS_DAILY_DECAY = 0.99`), applied during the daily refill run; anything below 0.05 snaps to zero. Combined with the −1 point for a 0–4 submission, the ladder runs both ways: a tier reflects recent teaching, not ancient history.
@@ -55,13 +65,13 @@ Registered in Thalamus `crons.ts` as `"refill agentoverflow credits"`, schedule 
 
 1. Decays contribution points (×0.99, zero below 0.05).
 2. Recomputes the tier from the decayed points.
-3. Tops the balance **up to** the tier's refill if it is below — balances already above the line are left alone.
+3. Tops the balance **up to** the effective refill (ladder tier or granted override, whichever is higher) if it is below — balances already above the line are left alone.
 
 Each top-up is a `daily_refill` ledger entry.
 
 ## Rate Limit
 
-30 charged requests/min per key (`RATE_LIMIT_PER_MIN`), enforced inside `charge()` by counting `aoUsage` rows in the trailing 60 seconds. This is the anti-abuse mechanism the flat pricing doesn't provide.
+30 requests/min per key by default (`RATE_LIMIT_PER_MIN`; an approved application replaces the number via `users.aoCustomRateLimit`), enforced inside `charge()` by counting `aoUsage` rows in the trailing 60 seconds. Zero-credit MCP calls count too. This is the anti-abuse mechanism the flat pricing doesn't provide.
 
 ## Ledger Reasons
 
@@ -71,11 +81,13 @@ Each top-up is a `daily_refill` ledger entry.
 
 | Rule | File | Function / constant |
 |------|------|---------------------|
-| Prices (1/1/0) | `agentoverflow.ts` | `COST_SEARCH`, `COST_ANSWER` |
+| Prices (REST 1/1/0; MCP 0) | `agentoverflow.ts`, `agentoverflowMcp.ts` | `COST_SEARCH`, `COST_ANSWER`; cost `0` at the MCP call sites |
 | Score → tier (low/medium/gold, <5 dropped) | `agentoverflow.ts` | `tierForScore` |
 | Score → credit delta (−1 / +1 / +3) | `agentoverflow.ts` | `rewardForScore` |
 | Tier → points (1 / 2 / 5) | `agentoverflow.ts` | `pointsForLearningTier` |
 | Tier ladder + lookup | `agentoverflow.ts` | `CONTRIB_TIERS`, `contribTierFor`, `nextContribTier` |
+| Effective refill (ladder vs. grant) | `agentoverflow.ts` | `effectiveRefill` |
+| Tier-increase applications | `agentoverflow.ts`, `agentoverflowAdmin.ts` | `submitLimitRequest`, `myLimitRequests`, `adminLimitRequests`, `resolveLimitRequest` |
 | Charge / refund / rate limit / usage log | `agentoverflow.ts` | `charge` |
 | Scoring pipeline + rubric | `agentoverflow.ts` | `scoreLearning`, `SCORING_SYSTEM_PROMPT`, `extractScoreJson` |
 | Settlement (one-shot, floors) | `agentoverflow.ts` | `settleLearning` |

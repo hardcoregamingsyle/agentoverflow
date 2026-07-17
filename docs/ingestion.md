@@ -38,7 +38,7 @@ Stage notes:
 - **filter** — streams `7z e -so` through an incremental XML parser, twice. Pass 1 keeps questions with Score ≥ 2; pass 2 keeps the best answer per question (accepted wins outright, otherwise top answer with Score ≥ 2). Questions without a qualifying answer drop out. HTML becomes plain text with `<pre>`/`<code>` preserved as fenced blocks.
 - **score** — deterministic heuristic (`ingestion/scoring.py`): `raw = 0.45*pct(log1p(qscore)) + 0.35*pct(log1p(ascore)) + 0.10*accepted + 0.10*pct(log1p(views))`, percentiles from a seeded 200k reservoir sample, cutpoints calibrated to ~5% tens and ~15% 8–9s. Score < 5 is dropped entirely.
 - **rescore-llm** — second opinion on everything the heuristic put at 8+; see below.
-- **embed-load** — fastembed `BAAI/bge-small-en-v1.5` in batches of 256; creates `ao_corpus` (on-disk vectors, int8 quantization) and the Postgres schema with `IF NOT EXISTS`; applies rescore overrides when present, recomputing the tier.
+- **embed-load** — fastembed `BAAI/bge-small-en-v1.5` in batches of 256; creates `ao_corpus` (on-disk vectors, int8 quantization) and the Postgres schema with `IF NOT EXISTS`; applies rescore overrides when present, recomputing the tier. HNSW indexing is disabled for the duration of the load (`indexing_threshold=0`, set at collection creation and re-applied on every restart) and restored to 20000 when the stage completes, so Qdrant builds the index once instead of on every upsert.
 - **graph-load** — inserts `doc_links` edges for LinkTypeId 1 (linked) and 3 (duplicate), only where both endpoints exist in `documents`.
 
 ## Resume Semantics
