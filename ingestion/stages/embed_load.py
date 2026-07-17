@@ -74,14 +74,20 @@ def run(cfg: Config) -> None:
     state = load_state(state_path)
     done = set(state.get("done_shards", []))
 
-    client = QdrantClient(url=cfg.qdrant_url)
+    # Generous timeout: even in-RAM upserts of a few hundred vectors shouldn't
+    # need it, but it stops a slow moment from killing the whole stage.
+    client = QdrantClient(url=cfg.qdrant_url, timeout=120)
     if not client.collection_exists(cfg.qdrant_collection):
+        # on_disk=False keeps vectors in RAM during the load. The whole corpus
+        # (~3.7M x 384-d fp32 ~ 6 GB) fits the ingest box many times over, and
+        # writing to a network disk per batch was the real bottleneck — ~30s a
+        # batch. int8 quantization (always_ram) still serves search from RAM.
         # indexing_threshold=0 disables HNSW indexing during the bulk load;
         # it is restored at the end of the stage once everything is upserted.
         client.create_collection(
             collection_name=cfg.qdrant_collection,
             vectors_config=qm.VectorParams(
-                size=384, distance=qm.Distance.COSINE, on_disk=True),
+                size=384, distance=qm.Distance.COSINE, on_disk=False),
             quantization_config=qm.ScalarQuantization(
                 scalar=qm.ScalarQuantizationConfig(
                     type=qm.ScalarType.INT8, always_ram=True)),
@@ -110,22 +116,22 @@ def run(cfg: Config) -> None:
     for shard in shards:
         if shard.name in done:
             continue
-        # Embedding is fast (~170 docs/s); the bottleneck was 256-row writes,
-        # one Qdrant round-trip + one fsync'd Postgres commit each, against a
-        # network disk. Batch the whole chunk into a single upsert + single
-        # commit — ~32x fewer round-trips. Per-chunk logging shows the real
-        # rate without waiting for a full 100k shard.
+        # Embedding is fast (~170 docs/s). With vectors in RAM the writes keep
+        # up: upsert in modest batches (a huge single upsert can exceed the HTTP
+        # timeout) and commit Postgres once per chunk so fsync isn't per-batch.
+        # Per-chunk logging shows the real rate without waiting for a 100k shard.
         for chunk in _batches(iter_jsonl_gz(shard), EMBED_CHUNK):
             rows = [_prepare(rec, overrides, cfg) for rec in chunk]
-            points = [
-                qm.PointStruct(id=r["point_id"], vector=[float(x) for x in vec],
-                               payload=r["payload"])
-                for r, vec in zip(rows, model.embed(
-                    [r["embed_text"] for r in rows], batch_size=cfg.embed_batch_size))
-            ]
-            # wait=False overlaps the write with the next chunk's embed; the WAL
-            # keeps it durable, so an interrupted shard still replays.
-            client.upsert(collection_name=cfg.qdrant_collection, points=points, wait=False)
+            paired = list(zip(rows, model.embed(
+                [r["embed_text"] for r in rows], batch_size=cfg.embed_batch_size)))
+            for i in range(0, len(paired), cfg.embed_batch_size):
+                sub = paired[i:i + cfg.embed_batch_size]
+                points = [
+                    qm.PointStruct(id=r["point_id"], vector=[float(x) for x in vec],
+                                   payload=r["payload"])
+                    for r, vec in sub
+                ]
+                client.upsert(collection_name=cfg.qdrant_collection, points=points, wait=False)
             with pg.cursor() as cur:
                 cur.executemany(
                     "INSERT INTO documents (doc_id, title, problem, solution, score, tier, source, url) "
