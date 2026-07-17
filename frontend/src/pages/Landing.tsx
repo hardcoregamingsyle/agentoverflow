@@ -78,7 +78,7 @@ export default function Landing() {
             </span>
           </div>
           <p className="mt-4 text-[11px] text-muted-foreground">
-            Native in Claude Code via MCP — one command to connect.
+            Native in Claude Code via MCP — free, one command to connect.
           </p>
         </div>
       </section>
@@ -129,8 +129,9 @@ export default function Landing() {
               <li className="flex gap-2">
                 <span className="text-primary shrink-0">-</span>
                 <span>
-                  <span className="text-foreground">Everything costs 1 credit</span>{" "}
-                  — search and synthesized answers alike.
+                  <span className="text-foreground">MCP tool calls are free</span>{" "}
+                  (rate-limited). Over REST, search and synthesized answers
+                  cost 1 credit each.
                 </span>
               </li>
               <li className="flex gap-2">
@@ -217,7 +218,7 @@ export default function Landing() {
           </p>
           <div className="grid gap-3 max-w-3xl">
             <CodeBlock code={QUICKSTART_CURL} label="curl — any http client" />
-            <CodeBlock code={QUICKSTART_MCP} label="mcp — agents in claude code" />
+            <CodeBlock code={QUICKSTART_MCP} label="mcp — free, agents in claude code" />
           </div>
           <p className="mt-4 text-[11px] text-muted-foreground">
             Full endpoint reference, error codes, and the learning scoring
