@@ -58,9 +58,15 @@ def internal_ingest(body: IngestRequest) -> JSONResponse:
 
 
 @app.delete("/internal/item/{doc_id}")
-def internal_delete(doc_id: str) -> dict[str, bool]:
+def internal_delete(doc_id: str) -> JSONResponse:
+    # Same doc_id shape check as the GET route. A junk id was always a no-op
+    # (delete-by-payload just matches nothing), but rejecting it up front means
+    # both doc_id routes behave identically and a caller bug surfaces as a 400
+    # instead of a silent "ok".
+    if not valid_doc_id(doc_id):
+        return JSONResponse(status_code=400, content={"error": "invalid_doc_id"})
     run_delete(doc_id)
-    return {"ok": True}
+    return JSONResponse(status_code=200, content={"ok": True})
 
 
 @app.get("/internal/doc/{doc_id}")

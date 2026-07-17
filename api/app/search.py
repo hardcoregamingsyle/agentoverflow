@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.rerank import Candidate, rerank
 
@@ -12,9 +12,15 @@ SNIPPET_CHARS = 400
 
 
 class SearchRequest(BaseModel):
-    query: str
-    top_k: int = 5
-    tags: list[str] = []
+    # The Convex gateway already clamps these before calling us, but this API
+    # trusts nothing past the shared secret: bounds here keep a compromised or
+    # buggy caller from asking for a 10k-result scan or a megabyte "query"
+    # (embedding truncates at 2000 chars anyway — the cap just refuses the
+    # pointless payload outright).
+    query: str = Field(min_length=1, max_length=8000)
+    top_k: int = Field(default=5, ge=1, le=25)
+    tags: list[Annotated[str, Field(min_length=1, max_length=64)]] = Field(
+        default=[], max_length=10)
     expand: bool = True
 
 

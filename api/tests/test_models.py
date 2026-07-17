@@ -57,6 +57,31 @@ class SearchRequestTests(unittest.TestCase):
         self.assertEqual(req.tags, ["python"])
         self.assertFalse(req.expand)
 
+    def test_bounds_rejected(self):
+        """The gateway clamps these; the VM re-checks so it never trusts it."""
+        from pydantic import ValidationError
+
+        from app.search import SearchRequest
+
+        for bad in [
+            {"query": ""},                       # empty query
+            {"query": "q" * 8001},               # oversize query
+            {"query": "q", "top_k": 0},          # below range
+            {"query": "q", "top_k": 26},         # above range
+            {"query": "q", "tags": ["t"] * 11},  # too many tags
+            {"query": "q", "tags": ["x" * 65]},  # oversize tag
+            {"query": "q", "tags": [""]},        # empty tag
+        ]:
+            with self.assertRaises(ValidationError, msg=repr(bad)):
+                SearchRequest(**bad)
+
+    def test_bounds_accepted_at_edges(self):
+        from app.search import SearchRequest
+
+        req = SearchRequest(query="q" * 8000, top_k=25, tags=["t" * 64] * 10)
+        self.assertEqual(req.top_k, 25)
+        self.assertEqual(len(req.tags), 10)
+
 
 @unittest.skipUnless(HAS_PYDANTIC, "pydantic not installed")
 class IngestRequestTests(unittest.TestCase):
@@ -136,6 +161,15 @@ class SecretHeaderTests(unittest.TestCase):
             json={"top_k": 3},  # query missing
         )
         self.assertEqual(response.status_code, 422)
+
+    def test_invalid_delete_doc_id_is_400(self):
+        # Rejected by the shape check before run_delete — no backend needed.
+        response = self.client.delete(
+            "/internal/item/has%20spaces!",
+            headers={"X-AO-Internal-Secret": self.secret},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "invalid_doc_id"})
 
     def test_invalid_ingest_body_is_422(self):
         response = self.client.post(
