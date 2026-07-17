@@ -36,9 +36,9 @@ from ..scoring import tier_for_score
 from ..shards import iter_jsonl_gz
 from ..state import load_state, save_state
 
-# Docs per model.embed() call. Big enough that the parallel=0 worker-pool
-# spawn amortizes; small enough to keep a chunk's rows in memory.
-EMBED_CHUNK = 8192
+# Docs per embed+write+commit cycle. Small enough that progress (and the
+# per-chunk log line) shows every few minutes, not once per 100k shard.
+EMBED_CHUNK = 2048
 
 # Qdrant's default optimizer threshold (in kB of vectors per segment); the
 # stage sets it to 0 while bulk-loading and restores this value at the end.
@@ -74,23 +74,23 @@ def run(cfg: Config) -> None:
     state = load_state(state_path)
     done = set(state.get("done_shards", []))
 
-    # Generous timeout: even in-RAM upserts of a few hundred vectors shouldn't
-    # need it, but it stops a slow moment from killing the whole stage.
+    # Long enough that a slow batch never kills the stage.
     client = QdrantClient(url=cfg.qdrant_url, timeout=120)
     if not client.collection_exists(cfg.qdrant_collection):
-        # on_disk=False keeps vectors in RAM during the load. The whole corpus
-        # (~3.7M x 384-d fp32 ~ 6 GB) fits the ingest box many times over, and
-        # writing to a network disk per batch was the real bottleneck — ~30s a
-        # batch. int8 quantization (always_ram) still serves search from RAM.
-        # indexing_threshold=0 disables HNSW indexing during the bulk load;
-        # it is restored at the end of the stage once everything is upserted.
+        # Vectors on disk + int8 quantization always in RAM: search runs off
+        # the 1.4 GB quantized set in memory, so the corpus serves from an 8 GB
+        # box (the fp32 originals stay on disk, rarely read). Payload on disk
+        # too, to keep serving RAM small. The bulk embed is CPU-bound anyway,
+        # so per-batch disk writes aren't the limiter. indexing_threshold=0
+        # disables HNSW indexing during load; restored at the end.
         client.create_collection(
             collection_name=cfg.qdrant_collection,
             vectors_config=qm.VectorParams(
-                size=384, distance=qm.Distance.COSINE, on_disk=False),
+                size=384, distance=qm.Distance.COSINE, on_disk=True),
             quantization_config=qm.ScalarQuantization(
                 scalar=qm.ScalarQuantizationConfig(
                     type=qm.ScalarType.INT8, always_ram=True)),
+            on_disk_payload=True,
             optimizers_config=qm.OptimizersConfigDiff(indexing_threshold=0),
         )
         print(f"[embed-load] created collection {cfg.qdrant_collection} "
