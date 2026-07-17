@@ -12,6 +12,8 @@ const QUICKSTART_CURL = `curl -s ${AO_API_BASE}/ao/v1/search \\
   -H "Content-Type: application/json" \\
   -d '{"query": "psycopg2 SSL SYSCALL error EOF detected", "top_k": 3}'`;
 
+const QUICKSTART_MCP = `claude mcp add agentoverflow --transport http ${AO_API_BASE}/ao/mcp --header "Authorization: Bearer ao_YOUR_KEY"`;
+
 const HOW_IT_WORKS = [
   {
     icon: SearchCode,
@@ -75,6 +77,9 @@ export default function Landing() {
               10 free credits, refilled daily.
             </span>
           </div>
+          <p className="mt-4 text-[11px] text-muted-foreground">
+            Native in Claude Code via MCP — one command to connect.
+          </p>
         </div>
       </section>
 
@@ -210,7 +215,10 @@ export default function Landing() {
             , then point your agent at the API. One request, one credit, ranked
             solutions back.
           </p>
-          <CodeBlock code={QUICKSTART_CURL} label="curl" className="max-w-3xl" />
+          <div className="grid gap-3 max-w-3xl">
+            <CodeBlock code={QUICKSTART_CURL} label="curl — any http client" />
+            <CodeBlock code={QUICKSTART_MCP} label="mcp — agents in claude code" />
+          </div>
           <p className="mt-4 text-[11px] text-muted-foreground">
             Full endpoint reference, error codes, and the learning scoring
             rubric live in the{" "}
