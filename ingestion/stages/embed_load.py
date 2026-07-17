@@ -27,6 +27,7 @@ interrupted shard is simply replayed.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
@@ -111,7 +112,14 @@ def run(cfg: Config) -> None:
             pg.execute(stmt)
     pg.commit()
 
-    model = TextEmbedding(cfg.embed_model)
+    # AO_EMBED_CUDA=1 (with fastembed-gpu installed) runs the model on a GPU —
+    # ~1000x the CPU rate, used for the one-time bulk load on a GPU box. The
+    # ONNX model is identical to the CPU path, so the query side stays consistent.
+    if os.environ.get("AO_EMBED_CUDA") == "1":
+        model = TextEmbedding(cfg.embed_model, cuda=True)
+        print("[embed-load] using CUDA execution provider", flush=True)
+    else:
+        model = TextEmbedding(cfg.embed_model)
     total = 0
     for shard in shards:
         if shard.name in done:
