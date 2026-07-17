@@ -13,6 +13,13 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.ingest import DuplicateError, IngestRequest, run_delete, run_ingest
+from app.public import (
+    parse_page,
+    run_get_doc,
+    run_sitemap_index,
+    run_sitemap_page,
+    valid_doc_id,
+)
 from app.search import SearchRequest, SearchResponse, run_search
 
 _SECRET = os.environ.get("AO_INTERNAL_SECRET", "")
@@ -54,6 +61,29 @@ def internal_ingest(body: IngestRequest) -> JSONResponse:
 def internal_delete(doc_id: str) -> dict[str, bool]:
     run_delete(doc_id)
     return {"ok": True}
+
+
+@app.get("/internal/doc/{doc_id}")
+def internal_doc(doc_id: str) -> JSONResponse:
+    if not valid_doc_id(doc_id):
+        return JSONResponse(status_code=400, content={"error": "invalid_doc_id"})
+    doc = run_get_doc(doc_id)
+    if doc is None:
+        return JSONResponse(status_code=404, content={"error": "not_found"})
+    return JSONResponse(status_code=200, content=doc)
+
+
+@app.get("/internal/sitemap-index")
+def internal_sitemap_index() -> dict[str, int]:
+    return run_sitemap_index()
+
+
+@app.get("/internal/sitemap/{page}")
+def internal_sitemap(page: str) -> JSONResponse:
+    parsed = parse_page(page)
+    if parsed is None:
+        return JSONResponse(status_code=400, content={"error": "invalid_page"})
+    return JSONResponse(status_code=200, content=run_sitemap_page(parsed))
 
 
 @app.get("/internal/health")
