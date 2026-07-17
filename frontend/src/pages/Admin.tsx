@@ -21,13 +21,14 @@ import {
 import * as thalamus from "@/lib/thalamusApi";
 import type {
   AdminLearning,
+  AdminLimitRequest,
   AdminStats,
   AdminUsagePoint,
   AdminUser,
   CorpusHealth,
 } from "@/lib/thalamusApi";
 import { cn } from "@/lib/utils";
-import { useAction, useConvex, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import {
   ChevronDown,
   ChevronRight,
@@ -576,6 +577,238 @@ function LearningsTable({
   );
 }
 
+/* ── limit requests ── */
+
+const REQUEST_STATUS_STYLES: Record<string, string> = {
+  pending: "border-primary/40 bg-primary/10 text-primary animate-pulse",
+  approved: "border-primary/50 bg-primary/15 text-primary",
+  rejected: "border-destructive/50 bg-destructive/15 text-destructive",
+};
+
+interface ResolveLimitArgs {
+  requestId: string;
+  approve: boolean;
+  dailyRefill?: number;
+  rateLimitPerMin?: number;
+  note?: string;
+}
+
+function ResolveControls({
+  request,
+  onResolve,
+}: {
+  request: AdminLimitRequest;
+  onResolve: (args: ResolveLimitArgs) => Promise<void>;
+}) {
+  // Prefilled with the user's current limits so "approve" grants at least the
+  // status quo unless the admin raises them. Clearing a field omits it.
+  const [refill, setRefill] = useState(String(request.currentRefill));
+  const [rate, setRate] = useState(String(request.currentRateLimit));
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+
+  const refillNum = Number(refill);
+  const rateNum = Number(rate);
+  const approveValid =
+    (refill.trim() === "" || (Number.isInteger(refillNum) && refillNum > 0)) &&
+    (rate.trim() === "" || (Number.isInteger(rateNum) && rateNum > 0));
+
+  const resolve = async (approve: boolean) => {
+    setBusy(approve ? "approve" : "reject");
+    try {
+      await onResolve({
+        requestId: request.id,
+        approve,
+        ...(approve && refill.trim() !== "" ? { dailyRefill: refillNum } : {}),
+        ...(approve && rate.trim() !== "" ? { rateLimitPerMin: rateNum } : {}),
+        ...(note.trim() !== "" ? { note: note.trim() } : {}),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 pt-1">
+      <div className="space-y-1">
+        <Label className="text-[10px] text-muted-foreground">daily refill</Label>
+        <Input
+          type="number"
+          value={refill}
+          onChange={(e) => setRefill(e.target.value)}
+          className="h-7 w-24 text-[11px] font-mono px-2"
+          disabled={busy !== null}
+          aria-label="Granted daily refill"
+        />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-[10px] text-muted-foreground">rate limit /min</Label>
+        <Input
+          type="number"
+          value={rate}
+          onChange={(e) => setRate(e.target.value)}
+          className="h-7 w-24 text-[11px] font-mono px-2"
+          disabled={busy !== null}
+          aria-label="Granted rate limit per minute"
+        />
+      </div>
+      <div className="space-y-1 flex-1 min-w-44">
+        <Label className="text-[10px] text-muted-foreground">note (optional)</Label>
+        <Input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="shown to the user"
+          className="h-7 text-[11px] font-mono px-2"
+          disabled={busy !== null}
+          aria-label="Resolution note"
+        />
+      </div>
+      <Button
+        size="sm"
+        className="h-7 text-[10px] px-3 font-bold"
+        disabled={!approveValid || busy !== null}
+        onClick={() => void resolve(true)}
+      >
+        {busy === "approve" ? <Loader2 className="h-3 w-3 animate-spin" /> : "approve"}
+      </Button>
+      <Button
+        variant="destructive"
+        size="sm"
+        className="h-7 text-[10px] px-3"
+        disabled={busy !== null}
+        onClick={() => void resolve(false)}
+      >
+        {busy === "reject" ? <Loader2 className="h-3 w-3 animate-spin" /> : "reject"}
+      </Button>
+    </div>
+  );
+}
+
+function LimitRequestsTable({
+  requests,
+  onResolve,
+}: {
+  requests: AdminLimitRequest[];
+  onResolve: (args: ResolveLimitArgs) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  return (
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
+        <CardTitle className="text-sm font-mono">limit requests</CardTitle>
+        <CardDescription className="text-[11px]">
+          Applications for higher daily refill / rate limits, pending first.
+          Expand a row for the use case and approval controls.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="px-5">
+        {requests.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-4">No limit requests yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-6" />
+                <TableHead className="text-[10px] uppercase tracking-wider">email</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">tier</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">current limits</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">expected volume</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">status</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">granted</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">requested</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {requests.map((r) => {
+                const isOpen = expanded === r.id;
+                return [
+                  <TableRow
+                    key={r.id}
+                    className="cursor-pointer"
+                    onClick={() => setExpanded(isOpen ? null : r.id)}
+                  >
+                    <TableCell className="text-muted-foreground">
+                      {isOpen ? (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs max-w-48 truncate" title={r.userEmail}>
+                      {r.userEmail}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "font-mono text-[10px]",
+                          CONTRIB_TIER_STYLES[r.userTier] ?? CONTRIB_TIER_STYLES.lurker
+                        )}
+                      >
+                        {r.userTier}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs font-mono text-muted-foreground whitespace-nowrap">
+                      {r.currentRefill}/day · {r.currentRateLimit}/min
+                    </TableCell>
+                    <TableCell className="text-xs max-w-40 truncate" title={r.expectedDaily}>
+                      {r.expectedDaily}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "font-mono text-[10px]",
+                          REQUEST_STATUS_STYLES[r.status]
+                        )}
+                      >
+                        {r.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs font-mono text-muted-foreground whitespace-nowrap">
+                      {r.status === "approved"
+                        ? `${r.grantedRefill ?? "—"}/day · ${r.grantedRateLimit ?? "—"}/min`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDay(r.createdAt)}
+                    </TableCell>
+                  </TableRow>,
+                  isOpen ? (
+                    <TableRow key={`${r.id}-detail`} className="hover:bg-transparent">
+                      <TableCell />
+                      <TableCell colSpan={7} className="whitespace-normal">
+                        <div className="py-1 space-y-2">
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            <span className="text-foreground font-semibold">use case: </span>
+                            {r.useCase}
+                          </p>
+                          {r.adminNote && (
+                            <p className="text-[11px] text-muted-foreground">
+                              <span className="text-foreground font-semibold">note: </span>
+                              {r.adminNote}
+                            </p>
+                          )}
+                          {r.status === "pending" && (
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <ResolveControls request={r} onResolve={onResolve} />
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : null,
+                ];
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /* ── users table ── */
 
 function CreditAdjust({
@@ -710,6 +943,7 @@ interface AdminData {
   learnings: AdminLearning[];
   users: AdminUser[];
   corpus: CorpusHealth;
+  limitRequests: AdminLimitRequest[];
 }
 
 function AdminDashboard({
@@ -722,6 +956,7 @@ function AdminDashboard({
   const convex = useConvex();
   const deleteLearningAction = useAction(thalamus.deleteLearning);
   const adjustCreditsAction = useAction(thalamus.adjustCredits);
+  const resolveLimitRequestMutation = useMutation(thalamus.resolveLimitRequest);
 
   const [data, setData] = useState<AdminData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -729,14 +964,15 @@ function AdminDashboard({
 
   const load = useCallback(async () => {
     try {
-      const [stats, series, learnings, users, corpus] = await Promise.all([
+      const [stats, series, learnings, users, corpus, limitRequests] = await Promise.all([
         convex.query(thalamus.adminStats, { adminToken: token }),
         convex.query(thalamus.adminUsageSeries, { adminToken: token }),
         convex.query(thalamus.adminLearnings, { adminToken: token, limit: 200 }),
         convex.query(thalamus.adminUsers, { adminToken: token }),
         convex.action(thalamus.adminCorpusHealth, { adminToken: token }),
+        convex.query(thalamus.adminLimitRequests, { adminToken: token }),
       ]);
-      setData({ stats, series, learnings, users, corpus });
+      setData({ stats, series, learnings, users, corpus, limitRequests });
       setLoadError(null);
     } catch (err) {
       if (isUnauthorized(err)) {
@@ -785,6 +1021,22 @@ function AdminDashboard({
       }
       toast.error(
         err instanceof Error ? err.message : "Failed to remove learning."
+      );
+    }
+  };
+
+  const handleResolveLimitRequest = async (args: ResolveLimitArgs) => {
+    try {
+      await resolveLimitRequestMutation({ adminToken: token, ...args });
+      toast.success(args.approve ? "Request approved." : "Request rejected.");
+      await load();
+    } catch (err) {
+      if (isUnauthorized(err)) {
+        onSignOut();
+        return;
+      }
+      toast.error(
+        err instanceof Error ? err.message : "Failed to resolve request."
       );
     }
   };
@@ -870,6 +1122,10 @@ function AdminDashboard({
               today={data.series[data.series.length - 1]}
             />
             <UsageChart series={data.series} />
+            <LimitRequestsTable
+              requests={data.limitRequests}
+              onResolve={handleResolveLimitRequest}
+            />
             <LearningsTable
               learnings={data.learnings}
               onDelete={handleDeleteLearning}

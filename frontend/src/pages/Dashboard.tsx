@@ -31,7 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import * as thalamus from "@/lib/thalamusApi";
-import type { AoAccount, LedgerReason } from "@/lib/thalamusApi";
+import type { AoAccount, LedgerReason, LimitRequestStatus } from "@/lib/thalamusApi";
 import { cn } from "@/lib/utils";
 import {
   Check,
@@ -88,7 +88,7 @@ const CONTRIB_TIER_STYLES: Record<string, string> = {
 };
 
 function TierCard({ account }: { account: AoAccount }) {
-  const { points, tier, nextTier } = account;
+  const { points, tier, nextTier, dailyRefill, rateLimit } = account;
   const progress = nextTier
     ? Math.min(100, Math.max(0, (points / nextTier.minPoints) * 100))
     : 100;
@@ -119,9 +119,18 @@ function TierCard({ account }: { account: AoAccount }) {
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-muted-foreground">daily refill</span>
-            <span className="text-foreground">{tier.dailyRefill}</span>
+            <span className="text-foreground">{dailyRefill}</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-muted-foreground">rate limit</span>
+            <span className="text-foreground">{rateLimit}/min</span>
           </div>
         </div>
+        {dailyRefill > tier.dailyRefill && (
+          <p className="text-[10px] text-muted-foreground">
+            custom limit granted — tier default is {tier.dailyRefill}/day
+          </p>
+        )}
         {nextTier ? (
           <div>
             <div className="h-1 rounded-full bg-secondary overflow-hidden">
@@ -142,6 +151,172 @@ function TierCard({ account }: { account: AoAccount }) {
           </p>
         )}
       </CardContent>
+    </Card>
+  );
+}
+
+/* ── limit requests ── */
+
+const USE_CASE_LIMITS = { min: 20, max: 2000 };
+
+// pending/approved/rejected — same badge language as learning statuses.
+const REQUEST_STATUS_STYLES: Record<LimitRequestStatus, string> = {
+  pending: "border-primary/40 bg-primary/10 text-primary animate-pulse",
+  approved: "border-primary/50 bg-primary/15 text-primary",
+  rejected: "border-destructive/50 bg-destructive/15 text-destructive",
+};
+
+function LimitRequestsCard({ token }: { token: string }) {
+  const requests = useQuery(thalamus.myLimitRequests, { token });
+  const submitRequest = useMutation(thalamus.submitLimitRequest);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [useCase, setUseCase] = useState("");
+  const [expectedDaily, setExpectedDaily] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const trimmedUseCase = useCase.trim();
+  const valid =
+    trimmedUseCase.length >= USE_CASE_LIMITS.min &&
+    trimmedUseCase.length <= USE_CASE_LIMITS.max &&
+    expectedDaily.trim().length > 0;
+
+  const handleSubmit = async () => {
+    if (!valid || submitting) return;
+    setSubmitting(true);
+    try {
+      await submitRequest({
+        token,
+        useCase: trimmedUseCase,
+        expectedDaily: expectedDaily.trim(),
+      });
+      toast.success("Request submitted — an admin will review it.");
+      setDialogOpen(false);
+      setUseCase("");
+      setExpectedDaily("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit request.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Card className="gap-2 py-5">
+      <CardHeader className="px-5">
+        <CardDescription className="text-[10px] tracking-widest uppercase font-mono">
+          higher limits
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="px-5 space-y-3">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full text-xs font-bold"
+          onClick={() => setDialogOpen(true)}
+        >
+          request higher limits
+        </Button>
+        {requests && requests.length > 0 && (
+          <div className="space-y-2">
+            {requests.map((r) => (
+              <div
+                key={r.id}
+                className="rounded-md border border-border/60 px-3 py-2 space-y-1.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <Badge
+                    variant="outline"
+                    className={cn("font-mono text-[10px]", REQUEST_STATUS_STYLES[r.status])}
+                  >
+                    {r.status}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground">
+                    {formatDay(r.createdAt)}
+                  </span>
+                </div>
+                {r.status === "approved" && (
+                  <p className="text-[10px] text-primary">
+                    granted: {r.grantedRefill ?? "—"}/day refill ·{" "}
+                    {r.grantedRateLimit ?? "—"} req/min
+                  </p>
+                )}
+                {r.adminNote && (
+                  <p className="text-[10px] text-muted-foreground">note: {r.adminNote}</p>
+                )}
+                <p className="text-[10px] text-muted-foreground/80 line-clamp-2" title={r.useCase}>
+                  {r.useCase}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="font-mono">
+          <DialogHeader>
+            <DialogTitle className="text-base">Request higher limits</DialogTitle>
+            <DialogDescription className="text-xs">
+              Describe what you&apos;re running and how much volume it needs.
+              Approved requests raise your daily refill and per-key rate limit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="lr-usecase" className="text-[11px] text-muted-foreground font-bold">
+                  USE CASE
+                </Label>
+                <span
+                  className={cn(
+                    "text-[10px] font-mono",
+                    useCase.length > USE_CASE_LIMITS.max
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {useCase.length}/{USE_CASE_LIMITS.max}
+                </span>
+              </div>
+              <Textarea
+                id="lr-usecase"
+                value={useCase}
+                onChange={(e) => setUseCase(e.target.value)}
+                placeholder="What the agent does and why the current limits are a bottleneck (20–2000 chars)..."
+                className="text-xs font-mono min-h-24"
+                disabled={submitting}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lr-volume" className="text-[11px] text-muted-foreground font-bold">
+                EXPECTED DAILY VOLUME
+              </Label>
+              <Input
+                id="lr-volume"
+                value={expectedDaily}
+                onChange={(e) => setExpectedDaily(e.target.value)}
+                placeholder="e.g. ~200 searches/day across 3 CI agents"
+                className="text-xs font-mono"
+                disabled={submitting}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              className="text-xs font-bold"
+              disabled={!valid || submitting}
+              onClick={() => void handleSubmit()}
+            >
+              {submitting ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> submitting...</>
+              ) : (
+                "submit request"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -171,12 +346,13 @@ function BalanceSection({ token }: { token: string }) {
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               {!account
                 ? "Your account initializes with 10 credits the first time you create an API key."
-                : `Balances below ${account.tier.dailyRefill} refill back to ${account.tier.dailyRefill} daily. Credits earned from learnings stack on top.`}
+                : `Balances below ${account.dailyRefill} refill back to ${account.dailyRefill} daily. Credits earned from learnings stack on top.`}
             </p>
           </CardContent>
         </Card>
 
         {account ? <TierCard account={account} /> : null}
+        <LimitRequestsCard token={token} />
       </div>
 
       <Card className="gap-3 py-5">

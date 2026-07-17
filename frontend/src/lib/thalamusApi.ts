@@ -93,6 +93,10 @@ export interface AoAccount {
   points: number;
   tier: AoTier;
   nextTier: AoNextTier | null;
+  /** Effective daily refill — max of the tier's refill and any granted override. */
+  dailyRefill: number;
+  /** Requests per minute allowed on this account's keys. */
+  rateLimit: number;
   ledger: LedgerEntry[];
 }
 
@@ -182,6 +186,34 @@ export const pingDau = makeFunctionReference<
   { token: string },
   null
 >("agentoverflow:pingDau");
+
+// ── Limit requests (higher daily refill / rate limit) ──────────────────────
+
+export type LimitRequestStatus = "pending" | "approved" | "rejected";
+
+export interface MyLimitRequest {
+  id: string;
+  status: LimitRequestStatus;
+  useCase: string;
+  adminNote: string | null;
+  grantedRefill: number | null;
+  grantedRateLimit: number | null;
+  createdAt: number;
+  resolvedAt: number | null;
+}
+
+/** Throws with a readable message on validation failure or an existing pending request. */
+export const submitLimitRequest = makeFunctionReference<
+  "mutation",
+  { token: string; useCase: string; expectedDaily: string },
+  string
+>("agentoverflow:submitLimitRequest");
+
+export const myLimitRequests = makeFunctionReference<
+  "query",
+  { token: string },
+  MyLimitRequest[]
+>("agentoverflow:myLimitRequests");
 
 // ── Admin (shared Thalamus admin token; see /admin) ────────────────────────
 
@@ -292,6 +324,43 @@ export const deleteLearning = makeFunctionReference<
   { adminToken: string; learningId: string },
   { ok: boolean }
 >("agentoverflowAdmin:deleteLearning");
+
+/** One limit-request application as the admin sees it. */
+export interface AdminLimitRequest {
+  id: string;
+  userEmail: string;
+  userTier: string;
+  currentRefill: number;
+  currentRateLimit: number;
+  useCase: string;
+  expectedDaily: string;
+  status: LimitRequestStatus;
+  adminNote: string | null;
+  grantedRefill: number | null;
+  grantedRateLimit: number | null;
+  createdAt: number;
+  resolvedAt: number | null;
+}
+
+/** Pending first. */
+export const adminLimitRequests = makeFunctionReference<
+  "query",
+  { adminToken: string },
+  AdminLimitRequest[]
+>("agentoverflowAdmin:adminLimitRequests");
+
+export const resolveLimitRequest = makeFunctionReference<
+  "mutation",
+  {
+    adminToken: string;
+    requestId: string;
+    approve: boolean;
+    dailyRefill?: number;
+    rateLimitPerMin?: number;
+    note?: string;
+  },
+  null
+>("agentoverflowAdmin:resolveLimitRequest");
 
 // ── Derived URLs ────────────────────────────────────────────────────────────
 
