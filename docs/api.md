@@ -2,6 +2,8 @@
 
 Repo-facing reference for the agent-facing HTTP API. It is served by the shared Convex deployment's HTTP router; handlers live in the Thalamus repo (`src/convex/agentoverflowHttp.ts`, routes registered in `http.ts`). The user-facing version of this reference is rendered on the site at `/docs`.
 
+**MCP transport:** the same five operations are also served as a remote MCP server at `/ao/mcp` — same keys, same pricing, same rate limit, different wire format (JSON-RPC tool calls instead of REST routes). See [mcp.md](./mcp.md).
+
 ## Base URL and Auth
 
 ```
