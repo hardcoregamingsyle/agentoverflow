@@ -107,6 +107,9 @@ fastembed `BAAI/bge-small-en-v1.5` in batches of 256. Creates `ao_corpus` on
 first run (on-disk vectors, int8 scalar quantization) and the Postgres schema
 with `IF NOT EXISTS`. Applies rescore overrides when present, recomputing the
 tier. Full problem/solution text goes to `documents`, tags to `doc_tags`.
+HNSW indexing is switched off (`indexing_threshold=0`) while the stage loads —
+at collection creation and on every restart — and restored to 20000 at the
+end, so Qdrant indexes once instead of during every upsert.
 
 Resume: `state/embed_load.json` tracks finished shards; inside a shard both
 Qdrant upserts and `ON CONFLICT DO NOTHING` inserts are idempotent, so an

@@ -15,6 +15,10 @@ scored shards in batches of embed.batch_size:
 Rescore overrides (state/rescore_overrides.jsonl) are applied when present:
 the override replaces the heuristic score and the tier is recomputed.
 
+HNSW indexing is disabled (indexing_threshold=0) for the duration of the
+bulk load — on collection creation and again on every (re)start against an
+existing collection — and restored to 20000 when the stage finishes.
+
 Resume: state/embed_load.json lists finished shards; within a shard, both
 Qdrant upserts and ON CONFLICT DO NOTHING inserts are idempotent, so an
 interrupted shard is simply replayed.
@@ -31,6 +35,10 @@ from ..records import doc_id, embedding_text, point_id, question_url, snippet
 from ..scoring import tier_for_score
 from ..shards import iter_jsonl_gz
 from ..state import load_state, save_state
+
+# Qdrant's default optimizer threshold (in kB of vectors per segment); the
+# stage sets it to 0 while bulk-loading and restores this value at the end.
+INDEXING_THRESHOLD = 20000
 
 _PG_SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -64,6 +72,8 @@ def run(cfg: Config) -> None:
 
     client = QdrantClient(url=cfg.qdrant_url)
     if not client.collection_exists(cfg.qdrant_collection):
+        # indexing_threshold=0 disables HNSW indexing during the bulk load;
+        # it is restored at the end of the stage once everything is upserted.
         client.create_collection(
             collection_name=cfg.qdrant_collection,
             vectors_config=qm.VectorParams(
@@ -71,8 +81,19 @@ def run(cfg: Config) -> None:
             quantization_config=qm.ScalarQuantization(
                 scalar=qm.ScalarQuantizationConfig(
                     type=qm.ScalarType.INT8, always_ram=True)),
+            optimizers_config=qm.OptimizersConfigDiff(indexing_threshold=0),
         )
-        print(f"[embed-load] created collection {cfg.qdrant_collection}", flush=True)
+        print(f"[embed-load] created collection {cfg.qdrant_collection} "
+              "(indexing disabled for bulk load)", flush=True)
+    else:
+        # Resume on an existing collection: same deal, indexing off while
+        # loading, restored at stage end.
+        client.update_collection(
+            collection_name=cfg.qdrant_collection,
+            optimizers_config=qm.OptimizersConfigDiff(indexing_threshold=0),
+        )
+        print(f"[embed-load] indexing disabled on {cfg.qdrant_collection} "
+              "for bulk load (indexing_threshold=0)", flush=True)
 
     pg = psycopg.connect(cfg.pg_dsn)
     for stmt in _PG_SCHEMA.split(";"):
@@ -115,6 +136,13 @@ def run(cfg: Config) -> None:
         save_state(state_path, state)
         print(f"[embed-load] {shard.name} loaded ({total:,} docs this run)", flush=True)
     pg.close()
+    client.update_collection(
+        collection_name=cfg.qdrant_collection,
+        optimizers_config=qm.OptimizersConfigDiff(
+            indexing_threshold=INDEXING_THRESHOLD),
+    )
+    print(f"[embed-load] indexing re-enabled on {cfg.qdrant_collection} "
+          f"(indexing_threshold={INDEXING_THRESHOLD})", flush=True)
     print("[embed-load] done", flush=True)
 
 
