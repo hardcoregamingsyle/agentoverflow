@@ -1,0 +1,13 @@
+# Caddy fronts the whole VM API. It terminates TLS (Let's Encrypt, auto-renewed)
+# for the API hostname and reverse-proxies every path to the api container over
+# the compose network. Two consequences that matter:
+#
+#   * /v1/* (public, bearer-auth) and /internal/* (Convex, secret-auth) are both
+#     HTTPS now — the X-AO-Internal-Secret no longer rides cleartext HTTP.
+#   * the api container binds 127.0.0.1 only, so this is the sole way in.
+#
+# AO_API_HOST comes from deploy/.env (e.g. api.agentoverflow.aphantic.skinticals.com).
+{$AO_API_HOST} {
+	encode zstd gzip
+	reverse_proxy api:8080
+}

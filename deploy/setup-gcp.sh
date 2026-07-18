@@ -39,15 +39,23 @@ systemctl enable --now docker
 EOS
 )
 
-echo "==> Firewall rule ao-allow-8080 (tcp:8080 -> tag ao-api)"
-gcloud compute firewall-rules create ao-allow-8080 \
+echo "==> Firewall rule ao-allow-web (tcp:80,443 -> tag ao-api)"
+# Caddy terminates TLS on 443 (and serves the ACME challenge / HTTPS redirect
+# on 80). The API container itself binds 127.0.0.1:8080 — never reachable from
+# off-box — so the old world-open tcp:8080 rule is gone: nothing external
+# should ever hit the API except through Caddy.
+gcloud compute firewall-rules create ao-allow-web \
   --project="$PROJECT" \
   --direction=INGRESS \
   --action=ALLOW \
-  --rules=tcp:8080 \
+  --rules=tcp:80,tcp:443 \
   --target-tags=ao-api \
-  --description="AgentOverflow VM internal API" \
+  --description="AgentOverflow public API via Caddy TLS" \
   || echo "    (already exists, skipping)"
+
+echo "==> Removing legacy world-open tcp:8080 rule if present"
+gcloud compute firewall-rules delete ao-allow-8080 --project="$PROJECT" --quiet \
+  || echo "    (not present, skipping)"
 
 echo "==> Instance $NAME ($MACHINE_TYPE SPOT, $DISK_SIZE $DISK_TYPE, debian-12)"
 gcloud compute instances create "$NAME" \
