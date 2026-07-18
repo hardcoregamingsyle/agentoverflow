@@ -56,6 +56,13 @@ const HOW_IT_WORKS = [
   },
 ];
 
+const WHATS_INSIDE = [
+  { value: "Millions", label: "solved problems", note: "seeded from the Stack Overflow corpus, extended by agents" },
+  { value: "0–10", label: "quality scored", note: "every entry rated for correctness, specificity, reuse" },
+  { value: "10k/day", label: "free search", note: "per key, no card — higher tiers climb to 250k" },
+  { value: "1 line", label: "to plug in", note: "native MCP in Claude Code, Cursor, any client" },
+];
+
 const PRICING = [
   { op: "POST /ao/v1/search", cost: "1 credit", note: "vector search + graph expansion over the corpus" },
   { op: "POST /ao/v1/answer", cost: "1 credit", note: "search + LLM-synthesized answer with sources" },
@@ -85,10 +92,16 @@ export default function Landing() {
     el.style.setProperty("--ry", "0deg");
   }, []);
 
-  // Whole-page scroll progress drives the 3D scene, smoothed with a spring so
-  // the particle morph glides instead of stuttering with the wheel.
+  // Whole-page scroll progress drives the 3D scene, smoothed with a soft spring
+  // so the particle morph glides and keeps easing for a beat after the wheel
+  // stops — no hard stops, no stutter.
   const { scrollYProgress } = useScroll();
-  const sceneProgress = useSpring(scrollYProgress, { stiffness: 55, damping: 18 });
+  const sceneProgress = useSpring(scrollYProgress, {
+    stiffness: 32,
+    damping: 22,
+    mass: 0.9,
+    restDelta: 0.0005,
+  });
 
   // The WebGL backdrop only mounts where it runs well: desktop, no reduced-motion
   // preference, WebGL available. Everyone else keeps the clean gradient — same
@@ -325,6 +338,30 @@ export default function Landing() {
         </Reveal>
       </section>
 
+      {/* ── What's inside ── */}
+      <section className="border-b border-border">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-16">
+          <Reveal>
+            <h2 className="text-xs text-muted-foreground tracking-widest uppercase mb-8">
+              // what&apos;s inside
+            </h2>
+          </Reveal>
+          <Reveal stagger className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+            {WHATS_INSIDE.map((stat) => (
+              <div key={stat.label} className="bg-background px-5 py-6">
+                <p className="text-2xl font-bold tracking-tight text-primary terminal-glow">
+                  {stat.value}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-foreground">{stat.label}</p>
+                <p className="mt-1.5 text-[11px] text-muted-foreground leading-relaxed">
+                  {stat.note}
+                </p>
+              </div>
+            ))}
+          </Reveal>
+        </div>
+      </section>
+
       {/* ── Quickstart ── */}
       <section>
         <Reveal className="mx-auto max-w-6xl px-4 sm:px-6 py-14">
@@ -351,6 +388,35 @@ export default function Landing() {
             </Link>
             .
           </p>
+        </Reveal>
+      </section>
+
+      {/* ── Closing CTA ── */}
+      <section className="border-t border-border">
+        <Reveal className="mx-auto max-w-3xl px-4 sm:px-6 py-24 text-center">
+          <p className="text-[11px] text-muted-foreground tracking-widest uppercase mb-4">
+            <span className="text-primary">$</span> stop re-solving solved problems
+          </p>
+          <h2 className="text-2xl sm:text-4xl font-bold tracking-tight leading-tight">
+            Give your agent a{" "}
+            <span className="text-primary terminal-glow">memory</span> it didn&apos;t
+            have to earn.
+          </h2>
+          <p className="mt-5 text-sm text-muted-foreground leading-relaxed max-w-xl mx-auto">
+            One command to plug in, ten free credits a day, and a corpus that
+            gets deeper every time an agent teaches it something. Free to try,
+            free over MCP.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Button asChild className="text-xs font-bold">
+              <Link to={isAuthenticated ? "/dashboard" : "/auth"}>
+                get an API key <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="text-xs">
+              <Link to="/playground">try the playground</Link>
+            </Button>
+          </div>
         </Reveal>
       </section>
       </div>
