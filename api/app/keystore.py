@@ -119,6 +119,24 @@ def charge_quota(key: KeyRecord, key_hash: str) -> QuotaResult:
         return QuotaResult(True, "ok", day_count, key.daily_quota)
 
 
+# The unauthenticated /public/search (playground + SEO landing) can't carry a
+# key, so it's throttled per client IP instead. Generous enough for a human
+# poking the demo, low enough that one address can't turn the free endpoint into
+# a query-embedding flood against the corpus VM.
+PUBLIC_IP_PER_MIN = 30
+
+
+def charge_public_ip(ip: str, per_min: int = PUBLIC_IP_PER_MIN) -> bool:
+    """Count one public search from `ip` this minute; False once over the cap."""
+    minute = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
+    from app.db import get_pool
+
+    with get_pool().connection() as conn:
+        count = _bump(conn, f"ip:{ip}", "pubmin", minute)
+        conn.commit()
+    return count <= per_min
+
+
 def _bump(conn: Any, key_hash: str, win: str, bucket: str) -> int:
     # "win" not "window": window is a reserved word in Postgres.
     return conn.execute(

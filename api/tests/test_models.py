@@ -255,3 +255,10 @@ class PublicSurfaceTests(unittest.TestCase):
         # before any DB access.
         response = self.client.get("/public/doc/has spaces!")
         self.assertEqual(response.status_code, 400)
+
+    def test_public_search_needs_no_bearer_but_validates(self):
+        # No Authorization header — a malformed body is still a 422, proving the
+        # route is reachable without a key (the DB-backed happy path isn't
+        # exercised here; there's no Postgres in unit tests).
+        response = self.client.post("/public/search", json={"top_k": 3})
+        self.assertEqual(response.status_code, 422)

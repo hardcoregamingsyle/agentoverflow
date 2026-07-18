@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 
 from app import keystore
 from app.public import run_get_doc, valid_doc_id
@@ -119,3 +119,33 @@ def public_doc_seo(doc_id: str, response: Response):
     # full 3.7M-page crawl without re-hitting Postgres for every request.
     response.headers["Cache-Control"] = f"public, max-age={DOC_CACHE_SECONDS}"
     return doc
+
+
+# Public keyless search powers the site playground and the SearchAction landing,
+# so a logged-out visitor (or a Google searcher) can try a query before signing
+# up. Throttled per client IP and capped to a few results — enough to show
+# value, not enough to abuse. Agents that want volume use the keyed /v1/search.
+PUBLIC_SEARCH_TOP_K = 5
+
+
+@router.post("/public/search", response_model=SearchResponse)
+def public_search_seo(body: SearchRequest, request: Request) -> SearchResponse:
+    ip = _client_ip(request)
+    if not keystore.charge_public_ip(ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many searches from this address; slow down or sign up for a key.",
+            headers={"Retry-After": "60"},
+        )
+    if body.top_k > PUBLIC_SEARCH_TOP_K:
+        body.top_k = PUBLIC_SEARCH_TOP_K
+    return run_search(body)
+
+
+def _client_ip(request: Request) -> str:
+    # Caddy sets X-Forwarded-For; take the first hop (the real client) and fall
+    # back to the socket peer if the header is missing.
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
