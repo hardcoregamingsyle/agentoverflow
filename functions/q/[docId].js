@@ -3,10 +3,16 @@
 // The site is a client-rendered SPA — great for humans, near-invisible to a
 // crawler that won't run our JS across 3.7M pages. This Pages Function sits in
 // front of every /q/<id> request, pulls the solved problem from the corpus VM,
-// and injects real HTML into the shell before it ships: <title>, meta
-// description, canonical, Open Graph/Twitter, a QAPage JSON-LD block, and the
-// full question + answer text inside #root. Googlebot indexes that immediately;
-// React clears #root on mount, so a human just sees the normal app.
+// and rewrites the shell's <head> in place (title, description, canonical, OG /
+// Twitter) plus a QAPage JSON-LD block, and drops the full question + answer
+// text into #root. Googlebot indexes that immediately; React clears #root on
+// mount, so a human just sees the normal app.
+//
+// In place matters: the shell already ships a generic <title>, a homepage
+// <link rel=canonical>, and OG tags. Appending would leave two titles and two
+// canonicals — poison for ranking — so every singleton is overwritten, never
+// duplicated. Only the robots meta and the JSON-LD (which the shell lacks) are
+// appended.
 //
 // The doc fetch is cached at the Cloudflare edge (the VM sends a 1-day
 // Cache-Control), so a full crawl doesn't hammer the backend.
@@ -21,75 +27,67 @@ export async function onRequestGet(context) {
 
   const shell = await env.ASSETS.fetch(new URL("/index.html", request.url));
 
-  // Malformed id: never a real page — serve the shell but keep it out of the
-  // index rather than letting a junk URL rank.
-  if (!DOC_ID_RE.test(docId)) {
-    return rewriteHead(shell, [noindexTag()], 200);
-  }
+  // Malformed id: never a real page — keep it out of the index.
+  if (!DOC_ID_RE.test(docId)) return serveNoindex(shell, 200);
 
   let doc = null;
   try {
     const res = await fetch(`${SEARCH_BASE}/public/doc/${encodeURIComponent(docId)}`, {
       cf: { cacheTtl: 86400, cacheEverything: true },
     });
-    if (res.status === 404) {
-      // Real 404 status + noindex so Google drops it, not a soft-404.
-      return rewriteHead(shell, [noindexTag()], 404);
-    }
+    if (res.status === 404) return serveNoindex(shell, 404); // real 404, not a soft one
     if (res.ok) doc = await res.json();
   } catch {
-    // VM unreachable — fall through and let the client-side app retry.
+    // VM unreachable — fall through and let the client-side app fetch it.
   }
-
-  // Couldn't render server-side: ship the plain shell, the SPA fetches the doc.
   if (!doc) return shell;
 
+  return renderDoc(shell, doc, docId);
+}
+
+function renderDoc(shell, doc, docId) {
   const url = `${SITE}/q/${docId}`;
-  const title = clip(doc.title || "Solved problem", 110);
+  const fullTitle = `${clip(doc.title || "Solved problem", 110)} — AgentOverflow`;
   const description = clip(oneLine(doc.problem || ""), 160);
 
-  const headTags = [
-    `<title>${esc(title)} — AgentOverflow</title>`,
-    `<meta name="description" content="${attr(description)}" />`,
-    `<link rel="canonical" href="${attr(url)}" />`,
-    `<meta name="robots" content="index,follow,max-image-preview:large" />`,
-    `<meta property="og:type" content="article" />`,
-    `<meta property="og:title" content="${attr(title)}" />`,
-    `<meta property="og:description" content="${attr(description)}" />`,
-    `<meta property="og:url" content="${attr(url)}" />`,
-    `<meta name="twitter:card" content="summary" />`,
-    `<meta name="twitter:title" content="${attr(title)}" />`,
-    `<meta name="twitter:description" content="${attr(description)}" />`,
-    jsonLd(doc, url),
-  ];
-
-  return rewriteHead(shell, headTags, 200, prerender(doc, docId));
-}
-
-// Apply the head injections (and optional #root prerender) to the shell.
-function rewriteHead(shell, headTags, status, rootHtml) {
-  let rw = new HTMLRewriter().on("head", {
-    element(el) {
-      for (const tag of headTags) el.append(tag, { html: true });
-    },
-  });
-  if (rootHtml) {
-    rw = rw.on("#root", {
-      element(el) {
-        el.append(rootHtml, { html: true });
+  const rw = new HTMLRewriter()
+    // Overwrite the singletons the shell already ships.
+    .on("title", { element: (e) => e.setInnerContent(fullTitle) })
+    .on('meta[name="description"]', { element: (e) => e.setAttribute("content", description) })
+    .on('link[rel="canonical"]', { element: (e) => e.setAttribute("href", url) })
+    .on('meta[property="og:type"]', { element: (e) => e.setAttribute("content", "article") })
+    .on('meta[property="og:title"]', { element: (e) => e.setAttribute("content", fullTitle) })
+    .on('meta[property="og:description"]', { element: (e) => e.setAttribute("content", description) })
+    .on('meta[property="og:url"]', { element: (e) => e.setAttribute("content", url) })
+    .on('meta[name="twitter:title"]', { element: (e) => e.setAttribute("content", fullTitle) })
+    .on('meta[name="twitter:description"]', { element: (e) => e.setAttribute("content", description) })
+    // Append the things the shell doesn't have: index directive + QAPage schema.
+    .on("head", {
+      element(e) {
+        e.append(`<meta name="robots" content="index,follow,max-image-preview:large" />`, { html: true });
+        e.append(jsonLd(doc, url), { html: true });
       },
-    });
-  }
-  const out = rw.transform(shell);
-  // Preserve headers, override status (404 for missing docs) and let humans and
-  // crawlers share the edge cache for a while.
-  const headers = new Headers(out.headers);
-  headers.set("Cache-Control", "public, max-age=600, s-maxage=3600");
-  return new Response(out.body, { status, headers });
+    })
+    // Crawler-visible content; React clears #root on mount for humans.
+    .on("#root", { element: (e) => e.append(prerender(doc, docId), { html: true }) });
+
+  return capped(rw.transform(shell), 200);
 }
 
-// The crawler-visible content. React's createRoot().render() clears #root on
-// mount, so this never double-renders for a human.
+// Missing/invalid doc: keep the shell but tell crawlers not to index it.
+function serveNoindex(shell, status) {
+  const rw = new HTMLRewriter().on("head", {
+    element: (e) => e.append(`<meta name="robots" content="noindex,follow" />`, { html: true }),
+  });
+  return capped(rw.transform(shell), status);
+}
+
+function capped(res, status) {
+  const headers = new Headers(res.headers);
+  headers.set("Cache-Control", "public, max-age=600, s-maxage=3600");
+  return new Response(res.body, { status, headers });
+}
+
 function prerender(doc, docId) {
   const tags = Array.isArray(doc.tags) ? doc.tags : [];
   return [
@@ -125,16 +123,9 @@ function jsonLd(doc, url) {
   return `<script type="application/ld+json">${json}</script>`;
 }
 
-function noindexTag() {
-  return `<meta name="robots" content="noindex,follow" />`;
-}
-
 // ── text helpers ──────────────────────────────────────────────────────────────
 function esc(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 function attr(s) {
   return esc(s).replace(/"/g, "&quot;");
