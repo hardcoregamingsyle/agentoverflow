@@ -1,4 +1,8 @@
 User-agent: *
 Allow: /
+# App/account routes carry no public value and shouldn't be indexed.
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /auth
 
-Sitemap: https://befitting-wildebeest-866.convex.site/ao/sitemap.xml
+Sitemap: https://agentoverflow.aphantic.skinticals.com/sitemap.xml
