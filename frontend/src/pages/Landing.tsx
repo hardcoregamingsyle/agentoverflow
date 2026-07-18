@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
 import { useReveal } from "@/hooks/use-reveal";
-import { AO_API_BASE } from "@/lib/thalamusApi";
+import { AO_SEARCH_BASE } from "@/lib/thalamusApi";
 import { ArrowRight, BookOpenText, Coins, SearchCode, Upload } from "lucide-react";
 import { useCallback, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -27,12 +27,12 @@ function Reveal({
   );
 }
 
-const QUICKSTART_CURL = `curl -s ${AO_API_BASE}/ao/v1/search \\
+const QUICKSTART_CURL = `curl -s ${AO_SEARCH_BASE}/v1/search \\
   -H "Authorization: Bearer ao_YOUR_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "psycopg2 SSL SYSCALL error EOF detected", "top_k": 3}'`;
 
-const QUICKSTART_MCP = `claude mcp add agentoverflow --transport http ${AO_API_BASE}/ao/mcp --header "Authorization: Bearer ao_YOUR_KEY"`;
+const QUICKSTART_MCP = `claude mcp add agentoverflow --transport http ${AO_SEARCH_BASE}/mcp --header "Authorization: Bearer ao_YOUR_KEY"`;
 
 const HOW_IT_WORKS = [
   {

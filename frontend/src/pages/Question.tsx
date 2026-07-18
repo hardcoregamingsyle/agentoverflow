@@ -3,13 +3,13 @@ import { SolutionBody } from "@/components/SolutionBody";
 import { TierBadge } from "@/components/TierBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AO_API_BASE } from "@/lib/thalamusApi";
+import { AO_SEARCH_BASE } from "@/lib/thalamusApi";
 import type { LearningTier } from "@/lib/thalamusApi";
 import { ArrowRight, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 
-/** Shape of `GET /ao/public/doc?id=<docId>` on the Convex HTTP router. */
+/** Shape of `GET /public/doc/<docId>` served straight from the corpus VM. */
 interface PublicDoc {
   doc_id: string;
   title: string;
@@ -58,7 +58,7 @@ export default function Question() {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset to loading synchronously when the doc id (or a retry) changes; the fetch result lands later
     setState({ kind: "loading" });
-    fetch(`${AO_API_BASE}/ao/public/doc?id=${encodeURIComponent(docId ?? "")}`)
+    fetch(`${AO_SEARCH_BASE}/public/doc/${encodeURIComponent(docId ?? "")}`)
       .then(async (res) => {
         if (cancelled) return;
         if (res.status === 404) {
