@@ -956,6 +956,7 @@ function AdminKeysPanel({ token }: { token: string }) {
   }, [convex, token]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch; every setState in load() runs after an await, never synchronously in the effect body
     void load();
   }, [load]);
 
