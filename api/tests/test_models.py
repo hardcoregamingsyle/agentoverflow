@@ -143,6 +143,7 @@ class SecretHeaderTests(unittest.TestCase):
             ("post", "/internal/search"),
             ("post", "/internal/ingest"),
             ("delete", "/internal/item/some-doc"),
+            ("post", "/internal/sync-keys"),
             ("get", "/internal/health"),
         ]:
             response = getattr(self.client, method)(path)
@@ -204,4 +205,47 @@ class SecretHeaderTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(set(body), {"ok", "qdrant", "postgres", "points"})
+        self.assertIsInstance(body["points"], int)
+
+
+@unittest.skipUnless(HAS_PYDANTIC, "pydantic not installed")
+class KeyHashTests(unittest.TestCase):
+    def test_hash_is_deterministic_sha256_hex(self):
+        from app.keystore import hash_key
+
+        h = hash_key("ao_abc123")
+        self.assertEqual(len(h), 64)
+        self.assertEqual(h, hash_key("ao_abc123"))
+        self.assertNotEqual(h, hash_key("ao_abc124"))
+
+
+@unittest.skipUnless(HAS_FASTAPI, "fastapi/httpx not installed")
+class PublicSurfaceTests(unittest.TestCase):
+    """Public /v1 auth + health — the paths that don't need a live DB."""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("AO_INTERNAL_SECRET", TEST_SECRET)
+
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        cls.client = TestClient(app)
+
+    def test_search_without_bearer_is_401(self):
+        # Malformed/missing key is rejected before any DB lookup.
+        for headers in [{}, {"Authorization": "Bearer nope"}, {"Authorization": "Basic x"}]:
+            response = self.client.post("/v1/search", json={"query": "hi"}, headers=headers)
+            self.assertEqual(response.status_code, 401, headers)
+
+    def test_doc_without_bearer_is_401(self):
+        response = self.client.get("/v1/doc/learning-abc")
+        self.assertEqual(response.status_code, 401)
+
+    def test_public_health_is_open_and_shaped(self):
+        response = self.client.get("/v1/health")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(set(body), {"ok", "points"})
         self.assertIsInstance(body["points"], int)

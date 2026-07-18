@@ -1,17 +1,27 @@
-"""AgentOverflow VM internal API (pinned contract C).
+"""AgentOverflow VM API — two surfaces on one uvicorn.
 
-Every endpoint requires header X-AO-Internal-Secret matching the
-AO_INTERNAL_SECRET env var. The process refuses to start without it.
+* /internal/*  — secret-authed (X-AO-Internal-Secret). Convex reaches these for
+                 ingest, delete, sitemaps, health, and pushing key snapshots.
+                 The process refuses to start without AO_INTERNAL_SECRET.
+* /v1/*        — public, bearer `ao_` key + local quota (see public_api). This
+                 is the surface agents hit; it never calls Convex.
+
+The internal secret used to ride cleartext HTTP on port 8080. Behind Caddy TLS
+both surfaces are HTTPS and 8080 is loopback-only, so the secret no longer
+crosses the wire.
 """
 
 from __future__ import annotations
 
 import os
 import secrets
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 
+from app import keystore
 from app.ingest import DuplicateError, IngestRequest, run_delete, run_ingest
 from app.public import (
     parse_page,
@@ -20,6 +30,7 @@ from app.public import (
     run_sitemap_page,
     valid_doc_id,
 )
+from app.public_api import router as public_router
 from app.search import SearchRequest, SearchResponse, run_search
 
 _SECRET = os.environ.get("AO_INTERNAL_SECRET", "")
@@ -38,24 +49,17 @@ def require_secret(
         raise HTTPException(status_code=401, detail="invalid or missing X-AO-Internal-Secret")
 
 
-# Auto-docs are disabled: this API is internal-only but listens on an exposed
-# port, and FastAPI's /docs, /redoc and /openapi.json routes do NOT inherit
-# app-level dependencies — they'd serve the full API schema to anyone.
-app = FastAPI(
-    title="AgentOverflow internal API",
-    dependencies=[Depends(require_secret)],
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
-)
+# The secret dependency lives on this router, NOT the app — that's what lets the
+# public /v1 router coexist under a different (bearer) auth on the same app.
+internal = APIRouter(dependencies=[Depends(require_secret)])
 
 
-@app.post("/internal/search", response_model=SearchResponse)
+@internal.post("/internal/search", response_model=SearchResponse)
 def internal_search(body: SearchRequest) -> SearchResponse:
     return run_search(body)
 
 
-@app.post("/internal/ingest")
+@internal.post("/internal/ingest")
 def internal_ingest(body: IngestRequest) -> JSONResponse:
     try:
         vm_doc_id = run_ingest(body)
@@ -67,7 +71,7 @@ def internal_ingest(body: IngestRequest) -> JSONResponse:
     return JSONResponse(status_code=200, content={"vm_doc_id": vm_doc_id})
 
 
-@app.delete("/internal/item/{doc_id}")
+@internal.delete("/internal/item/{doc_id}")
 def internal_delete(doc_id: str) -> JSONResponse:
     # Same doc_id shape check as the GET route. A junk id was always a no-op
     # (delete-by-payload just matches nothing), but rejecting it up front means
@@ -79,7 +83,23 @@ def internal_delete(doc_id: str) -> JSONResponse:
     return JSONResponse(status_code=200, content={"ok": True})
 
 
-@app.get("/internal/doc/{doc_id}")
+@internal.post("/internal/sync-keys")
+def internal_sync_keys(body: dict) -> JSONResponse:
+    """Full snapshot of active API keys, pushed by Convex on a cron.
+
+    Body: {"keys": [{"key_hash","user_id","daily_quota","burst_per_min"}, ...]}.
+    A full replace (see keystore.replace_keys) means a revocation in Convex
+    lands here as an omission — no separate delete call to keep in sync.
+    """
+    keys = body.get("keys")
+    if not isinstance(keys, list):
+        return JSONResponse(status_code=400, content={"error": "keys must be a list"})
+    keystore.ensure_schema()
+    active = keystore.replace_keys(keys)
+    return JSONResponse(status_code=200, content={"ok": True, "active_keys": active})
+
+
+@internal.get("/internal/doc/{doc_id}")
 def internal_doc(doc_id: str) -> JSONResponse:
     if not valid_doc_id(doc_id):
         return JSONResponse(status_code=400, content={"error": "invalid_doc_id"})
@@ -89,12 +109,12 @@ def internal_doc(doc_id: str) -> JSONResponse:
     return JSONResponse(status_code=200, content=doc)
 
 
-@app.get("/internal/sitemap-index")
+@internal.get("/internal/sitemap-index")
 def internal_sitemap_index() -> dict[str, int]:
     return run_sitemap_index()
 
 
-@app.get("/internal/sitemap/{page}")
+@internal.get("/internal/sitemap/{page}")
 def internal_sitemap(page: str) -> JSONResponse:
     parsed = parse_page(page)
     if parsed is None:
@@ -102,7 +122,7 @@ def internal_sitemap(page: str) -> JSONResponse:
     return JSONResponse(status_code=200, content=run_sitemap_page(parsed))
 
 
-@app.get("/internal/health")
+@internal.get("/internal/health")
 def internal_health() -> dict[str, bool | int]:
     from app.db import postgres_health, qdrant_health
 
@@ -114,3 +134,27 @@ def internal_health() -> dict[str, bool | int]:
         "postgres": postgres_ok,
         "points": points,
     }
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Best-effort: if Postgres isn't up yet the first /internal/sync-keys will
+    # create the tables anyway. Never let a cold DB stop the process booting.
+    try:
+        keystore.ensure_schema()
+    except Exception:
+        pass
+    yield
+
+
+# Auto-docs are disabled: even the public surface shouldn't hand out a schema of
+# every route on an internet-facing port.
+app = FastAPI(
+    title="AgentOverflow API",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+    lifespan=_lifespan,
+)
+app.include_router(internal)
+app.include_router(public_router)
