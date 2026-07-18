@@ -9,7 +9,7 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { MotionValue } from "framer-motion";
 
-const PARTICLE_COUNT = 2600;
+const PARTICLE_COUNT = 3000;
 
 // Hermite ease, clamped — same curve GLSL's smoothstep uses.
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -36,7 +36,7 @@ const VERT = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     vDepth = -mv.z;
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = (0.9 + aSeed * 1.3) * (300.0 / -mv.z);
+    gl_PointSize = (1.0 + aSeed * 1.5) * (300.0 / -mv.z);
   }
 `;
 
@@ -52,21 +52,21 @@ const FRAG = /* glsl */ `
     if (d > 0.5) discard;
     float alpha = smoothstep(0.5, 0.08, d);
 
-    // AgentOverflow blue (hero) → cyan (deep scroll); rare gold sparks are the
-    // "gold tier" of the corpus. Colors kept deep and alpha low: this material
-    // blends additively, so overlapping particles SUM — bright colors at high
-    // alpha clip to a white blob wherever the globe is dense.
-    vec3 blue = vec3(0.24, 0.36, 0.92);
-    vec3 cyan = vec3(0.16, 0.62, 0.74);
-    vec3 gold = vec3(0.95, 0.68, 0.22);
-    vec3 color = mix(blue, cyan, uMorph);
-    color = mix(color, gold, step(0.96, vSeed) * 0.9); // ~4% gold-tier sparks
+    // Exact brand palette: --primary #0087f8 (hero) → a brighter sky-blue
+    // (deep scroll), with --accent #e78c08 gold sparks for the corpus's gold
+    // tier. The primary has ~no red channel, so additive blending saturates it
+    // toward bright cyan-blue, NOT white — that's what lets it glow safely.
+    vec3 blue = vec3(0.02, 0.53, 0.97);
+    vec3 sky  = vec3(0.22, 0.67, 1.00);
+    vec3 gold = vec3(0.91, 0.55, 0.06);
+    vec3 color = mix(blue, sky, uMorph);
+    color = mix(color, gold, step(0.955, vSeed)); // ~4.5% gold-tier sparks, full strength
 
-    // Fade as it disperses: a bright orb in the hero that recedes into a faint,
-    // sparse backdrop behind the text-heavy sections, so it never fights copy.
-    float fade = clamp(1.6 - vDepth * 0.12, 0.25, 1.0);
-    float disperseFade = 1.0 - uMorph * 0.6;
-    gl_FragColor = vec4(color, alpha * 0.55 * fade * disperseFade);
+    // Fade as it disperses so the field recedes behind the text-heavy middle
+    // sections instead of fighting the copy.
+    float fade = clamp(1.6 - vDepth * 0.12, 0.3, 1.0);
+    float disperseFade = 1.0 - uMorph * 0.5;
+    gl_FragColor = vec4(color, alpha * 0.34 * fade * disperseFade);
   }
 `;
 
@@ -87,9 +87,11 @@ function CorpusCloud({ progress }: { progress: MotionValue<number> }) {
       const t = i / PARTICLE_COUNT;
       const phi = Math.acos(1 - 2 * t);
       const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-      const r = 1.85 + (rand() - 0.5) * 0.45;
+      // Thick, loose shell: spreading particles across a wide radial band keeps
+      // the silhouette from becoming a hard, dense limb that additive would pile up.
+      const r = 2.0 + (rand() - 0.5) * 0.9;
       positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = r * Math.cos(phi) * 0.85; // slightly oblate
+      positions[i * 3 + 1] = r * Math.cos(phi) * 0.72; // oblate — a lens, not a ball
       positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
 
       // Dispersed target: a wide, sparse field the globe dissolves into — wide
@@ -139,10 +141,10 @@ function CorpusCloud({ progress }: { progress: MotionValue<number> }) {
         fragmentShader={FRAG}
         transparent
         depthWrite={false}
-        // Normal (not additive) blending: additive SUMS overlapping particles,
-        // so a dense sphere limb clips to white. Normal compositing keeps the
-        // blue true no matter how many particles stack.
-        blending={THREE.NormalBlending}
+        // Additive for the glow that matches the terminal-glow aesthetic. Safe
+        // from white-out because the brand blue has ~no red channel and a
+        // loose, low-alpha shell keeps any single line-of-sight from saturating.
+        blending={THREE.AdditiveBlending}
         uniforms={{ uTime: { value: 0 }, uMorph: { value: 0 } }}
       />
     </points>
@@ -167,7 +169,7 @@ function CoreFrame({ progress }: { progress: MotionValue<number> }) {
   return (
     <mesh ref={mesh}>
       <icosahedronGeometry args={[1.4, 1]} />
-      <meshBasicMaterial color="#5b82ff" wireframe transparent opacity={0.1} />
+      <meshBasicMaterial color="#0a90ff" wireframe transparent opacity={0.14} />
     </mesh>
   );
 }

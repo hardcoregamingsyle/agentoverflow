@@ -122,7 +122,16 @@ export default function Landing() {
   return (
     <Layout>
       {show3d && (
-        <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
+        <div
+          className="pointer-events-none fixed inset-0 z-0"
+          aria-hidden="true"
+          // Fade the scene toward the top/bottom edges so the orb's glow never
+          // forms a hard bright band at a section boundary or under the nav.
+          style={{
+            maskImage: "linear-gradient(to bottom, transparent, #000 14%, #000 64%, transparent 88%)",
+            WebkitMaskImage: "linear-gradient(to bottom, transparent, #000 14%, #000 64%, transparent 88%)",
+          }}
+        >
           <Suspense fallback={null}>
             <CorpusScene progress={sceneProgress} />
           </Suspense>
