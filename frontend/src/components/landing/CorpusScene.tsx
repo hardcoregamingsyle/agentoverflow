@@ -9,7 +9,7 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { MotionValue } from "framer-motion";
 
-const PARTICLE_COUNT = 4500;
+const PARTICLE_COUNT = 2600;
 
 // Hermite ease, clamped — same curve GLSL's smoothstep uses.
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -36,7 +36,7 @@ const VERT = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     vDepth = -mv.z;
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = (1.4 + aSeed * 1.9) * (300.0 / -mv.z);
+    gl_PointSize = (0.9 + aSeed * 1.3) * (300.0 / -mv.z);
   }
 `;
 
@@ -62,8 +62,11 @@ const FRAG = /* glsl */ `
     vec3 color = mix(blue, cyan, uMorph);
     color = mix(color, gold, step(0.96, vSeed) * 0.9); // ~4% gold-tier sparks
 
-    float fade = clamp(1.6 - vDepth * 0.12, 0.2, 1.0);
-    gl_FragColor = vec4(color, alpha * 0.42 * fade);
+    // Fade as it disperses: a bright orb in the hero that recedes into a faint,
+    // sparse backdrop behind the text-heavy sections, so it never fights copy.
+    float fade = clamp(1.6 - vDepth * 0.12, 0.25, 1.0);
+    float disperseFade = 1.0 - uMorph * 0.6;
+    gl_FragColor = vec4(color, alpha * 0.55 * fade * disperseFade);
   }
 `;
 
@@ -84,15 +87,16 @@ function CorpusCloud({ progress }: { progress: MotionValue<number> }) {
       const t = i / PARTICLE_COUNT;
       const phi = Math.acos(1 - 2 * t);
       const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-      const r = 2.15 + (rand() - 0.5) * 0.5;
+      const r = 1.85 + (rand() - 0.5) * 0.45;
       positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = r * Math.cos(phi) * 0.85; // slightly oblate
       positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
 
-      // Dispersed target: a wide flat field the globe dissolves into.
-      scattered[i * 3] = (rand() - 0.5) * 11;
-      scattered[i * 3 + 1] = (rand() - 0.5) * 7;
-      scattered[i * 3 + 2] = (rand() - 0.5) * 6 - 1.5;
+      // Dispersed target: a wide, sparse field the globe dissolves into — wide
+      // enough that the particles never crowd the copy behind them.
+      scattered[i * 3] = (rand() - 0.5) * 15;
+      scattered[i * 3 + 1] = (rand() - 0.5) * 10;
+      scattered[i * 3 + 2] = (rand() - 0.5) * 8 - 1.5;
 
       seeds[i] = rand();
     }
@@ -115,7 +119,9 @@ function CorpusCloud({ progress }: { progress: MotionValue<number> }) {
       points.current.rotation.y = clock.elapsedTime * 0.04 + p * Math.PI * 1.2;
       points.current.rotation.x = Math.sin(p * Math.PI) * 0.18;
     }
-    camera.position.z = 6.2 - smoothstep(0, 1, p) * 1.5;
+    // Dive in through the dispersal, pull back out as it re-gathers — so the
+    // closing orb sits whole and distant, not shoved into the viewer's face.
+    camera.position.z = 7.4 - Math.sin(p * Math.PI) * 1.7;
     camera.position.y = Math.sin(p * Math.PI) * -0.6;
     camera.lookAt(0, 0, 0);
   });
@@ -133,7 +139,10 @@ function CorpusCloud({ progress }: { progress: MotionValue<number> }) {
         fragmentShader={FRAG}
         transparent
         depthWrite={false}
-        blending={THREE.AdditiveBlending}
+        // Normal (not additive) blending: additive SUMS overlapping particles,
+        // so a dense sphere limb clips to white. Normal compositing keeps the
+        // blue true no matter how many particles stack.
+        blending={THREE.NormalBlending}
         uniforms={{ uTime: { value: 0 }, uMorph: { value: 0 } }}
       />
     </points>
@@ -166,7 +175,7 @@ function CoreFrame({ progress }: { progress: MotionValue<number> }) {
 export default function CorpusScene({ progress }: { progress: MotionValue<number> }) {
   return (
     <Canvas
-      camera={{ position: [0, 0, 6.2], fov: 46 }}
+      camera={{ position: [0, 0, 7.4], fov: 46 }}
       dpr={[1, 1.5]}
       gl={{ antialias: false, powerPreference: "high-performance", alpha: true }}
       style={{ position: "absolute", inset: 0 }}

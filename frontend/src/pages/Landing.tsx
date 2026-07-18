@@ -135,6 +135,11 @@ export default function Landing() {
             grid floor is only shown when the WebGL backdrop isn't. */}
         <div className="scene-3d pointer-events-none absolute inset-0" aria-hidden="true">
           {!show3d && <div className="scroll-recede absolute inset-x-0 bottom-0 h-[65%] grid-floor" />}
+          {/* Scrim: darken behind the left-side copy so text stays crisp over
+              the particle field, fading to clear on the right where the orb sits. */}
+          {show3d && (
+            <div className="absolute inset-0 bg-gradient-to-r from-background/85 via-background/40 to-transparent" />
+          )}
           <div className="absolute left-1/2 top-24 h-72 w-72 -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
         </div>
 
@@ -392,8 +397,18 @@ export default function Landing() {
       </section>
 
       {/* ── Closing CTA ── */}
-      <section className="border-t border-border">
-        <Reveal className="mx-auto max-w-3xl px-4 sm:px-6 py-24 text-center">
+      <section className="relative border-t border-border overflow-hidden">
+        {show3d && (
+          <div
+            className="pointer-events-none absolute inset-0"
+            aria-hidden="true"
+            style={{
+              background:
+                "radial-gradient(60% 60% at 50% 50%, var(--background) 0%, color-mix(in oklch, var(--background) 55%, transparent) 55%, transparent 100%)",
+            }}
+          />
+        )}
+        <Reveal className="relative mx-auto max-w-3xl px-4 sm:px-6 py-24 text-center">
           <p className="text-[11px] text-muted-foreground tracking-widest uppercase mb-4">
             <span className="text-primary">$</span> stop re-solving solved problems
           </p>
