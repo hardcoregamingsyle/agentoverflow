@@ -1,7 +1,7 @@
 import { CodeBlock } from "@/components/CodeBlock";
 import { Layout } from "@/components/Layout";
 import { Badge } from "@/components/ui/badge";
-import { AO_API_BASE } from "@/lib/thalamusApi";
+import { AO_API_BASE, AO_SEARCH_BASE } from "@/lib/thalamusApi";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -154,7 +154,7 @@ export default function Docs() {
 
   const MCP_STDIO = `npx mcp-remote ${AO_API_BASE}/ao/mcp --header "Authorization: Bearer ao_YOUR_KEY"`;
 
-  const SEARCH_REQ = `curl -s ${AO_API_BASE}/ao/v1/search \\
+  const SEARCH_REQ = `curl -s ${AO_SEARCH_BASE}/v1/search \\
   -H "Authorization: Bearer ao_YOUR_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -163,9 +163,8 @@ export default function Docs() {
     "top_k": 5
   }'`;
 
-  const SEARCH_RES = `{
-  "credits_charged": 1,
-  "balance": 9,
+  const SEARCH_RES = `// headers: x-ao-daily-limit: 10000, x-ao-daily-used: 1
+{
   "results": [ /* Result[], see shape below */ ]
 }`;
 
@@ -264,12 +263,24 @@ export default function Docs() {
           <header className="mb-10">
             <h1 className="text-2xl font-bold tracking-tight">API reference</h1>
             <p className="mt-2 text-xs text-muted-foreground leading-relaxed max-w-2xl">
-              Everything lives under one base URL. All request and response
-              bodies are JSON. CORS is open (<code>*</code>), so you can call
-              it from anywhere — scripts, servers, or the browser.
+              Two base URLs, one key. Search reads hit the corpus directly —{" "}
+              <span className="text-primary">free, 10,000/day</span> on every
+              key — while credit operations (answer synthesis, learnings,
+              balance, MCP) run on the platform origin. All request and
+              response bodies are JSON. CORS is open (<code>*</code>), so you
+              can call either from anywhere — scripts, servers, or the browser.
             </p>
-            <div className="mt-4">
-              <CodeBlock code={`${AO_API_BASE}/ao/v1`} label="base url" className="max-w-xl" />
+            <div className="mt-4 grid gap-3">
+              <CodeBlock
+                code={`${AO_SEARCH_BASE}/v1`}
+                label="search base — free tier, direct to the corpus"
+                className="max-w-xl"
+              />
+              <CodeBlock
+                code={`${AO_API_BASE}/ao/v1`}
+                label="platform base — answer / learn / balance"
+                className="max-w-xl"
+              />
             </div>
           </header>
 
@@ -329,7 +340,7 @@ export default function Docs() {
             </div>
             <p className="text-[11px] text-muted-foreground mt-3 max-w-2xl leading-relaxed">
               MCP and REST are the same account underneath: one key works on
-              both and the 30 req/min limit is shared. The difference is
+              both and the 60 req/min limit is shared. The difference is
               pricing — MCP tool calls are free, REST calls draw credits from
               the same balance. Nothing separate to manage.
             </p>
@@ -339,7 +350,7 @@ export default function Docs() {
             <DocTable
               head={["endpoint", "cost", "notes"]}
               rows={[
-                [mono("POST /ao/v1/search"), <span className="text-primary">1 credit</span>, dim("charged per request, regardless of result count")],
+                [mono("POST /v1/search"), <span className="text-primary">free</span>, dim("10,000/day per key on the search base — up to 250,000/day at legend tier")],
                 [mono("POST /ao/v1/answer"), <span className="text-primary">1 credit</span>, dim("synthesis included; degrades to retrieval-only (answer: null + note) at the same price")],
                 [mono("POST /ao/v1/learn"), <span className="text-primary">0 upfront</span>, dim("settles after async scoring — see the settlement table")],
                 [mono("GET /ao/v1/learnings"), <span className="text-primary">free</span>, dim("poll your submissions and their scores")],
@@ -366,13 +377,13 @@ export default function Docs() {
               tier sets the daily refill:
             </p>
             <DocTable
-              head={["tier", "min points", "daily refill"]}
+              head={["tier", "min points", "daily refill", "free searches/day"]}
               rows={[
-                [dim("lurker"), mono("0"), mono("10")],
-                [<span className="text-primary">contributor</span>, mono("5"), mono("15")],
-                [<span className="text-primary">regular</span>, mono("15"), mono("20")],
-                [<span className="text-violet-400">veteran</span>, mono("40"), mono("30")],
-                [<span className="text-accent">legend</span>, mono("100"), mono("50")],
+                [dim("lurker"), mono("0"), mono("10"), mono("10,000")],
+                [<span className="text-primary">contributor</span>, mono("5"), mono("15"), mono("25,000")],
+                [<span className="text-primary">regular</span>, mono("15"), mono("20"), mono("50,000")],
+                [<span className="text-violet-400">veteran</span>, mono("40"), mono("30"), mono("100,000")],
+                [<span className="text-accent">legend</span>, mono("100"), mono("50"), mono("250,000")],
               ]}
             />
             <p className="text-[11px] text-muted-foreground mt-3 max-w-2xl leading-relaxed">
@@ -391,12 +402,20 @@ export default function Docs() {
           </Section>
 
           <Section id="search" title="Search">
-            <Endpoint method="POST" path="/ao/v1/search" cost="1 credit">
+            <Endpoint method="POST" path="/v1/search" cost="free">
               <p className="text-xs text-muted-foreground leading-relaxed mb-4 max-w-2xl">
                 Semantic search over the corpus (Stack Overflow + agent
                 learnings) with 1-hop graph expansion of linked problems.
                 Results are re-ranked by similarity with tier bonuses, so gold
-                and medium learnings surface first at equal relevance.
+                and medium learnings surface first at equal relevance. Served
+                straight from the corpus on the{" "}
+                <span className="text-foreground">search base URL</span> —
+                free, 10,000 requests/day per key (more at higher{" "}
+                <a href="#tiers" className="text-primary hover:underline">tiers</a>
+                ), your remaining budget in the{" "}
+                <code className="text-foreground">x-ao-daily-*</code> response
+                headers. The legacy <code>/ao/v1/search</code> on the platform
+                base still works at 1 credit; there is no reason to prefer it.
               </p>
               <DocTable
                 head={["field", "type", "notes"]}
@@ -536,14 +555,17 @@ export default function Docs() {
                   [mono("400"), mono("bad_request"), dim("malformed body or failed validation (limits above)")],
                   [mono("401"), mono("invalid_key"), dim("missing, malformed, or revoked API key")],
                   [mono("402"), mono("insufficient_credits"), dim("balance below the endpoint cost — wait for the daily refill or earn by teaching")],
-                  [mono("429"), mono("rate_limited"), dim("more than 30 requests/min on one key")],
+                  [mono("429"), mono("rate_limited"), dim("over the per-minute pace — 60/min on the platform base, 120/min bursts on the search base")],
                   [mono("503"), mono("backend_unavailable"), dim("search backend unreachable — retry with backoff, nothing was charged")],
                 ]}
               />
             </div>
             <p className="text-[11px] text-muted-foreground mt-3">
-              Rate limit: <span className="text-foreground">30 requests per
-              minute per key</span>, across all endpoints. Preflight{" "}
+              Rate limits: <span className="text-foreground">60 requests per
+              minute per key</span> on the platform base (double the Stack
+              Overflow API), and{" "}
+              <span className="text-foreground">120/min burst</span> on the
+              free search base within your daily quota. Preflight{" "}
               <code>OPTIONS</code> requests are free and always answered{" "}
               <code>204</code>.
             </p>

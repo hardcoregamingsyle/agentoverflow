@@ -364,5 +364,14 @@ export const resolveLimitRequest = makeFunctionReference<
 
 // ── Derived URLs ────────────────────────────────────────────────────────────
 
-/** The Convex HTTP-router origin (agents hit `${AO_API_BASE}/ao/v1/*`). */
+/** The Convex HTTP-router origin — credit ops only (answer/learn/balance/MCP). */
 export const AO_API_BASE = CONVEX_URL.replace(".convex.cloud", ".convex.site");
+
+/**
+ * The direct corpus endpoint (Caddy TLS -> VM). Search and doc reads go here:
+ * free tier, key checked on the VM itself, no Convex hop. Overridable for
+ * staging the same way CONVEX_URL is.
+ */
+export const AO_SEARCH_BASE =
+  (import.meta.env.VITE_AO_SEARCH_BASE as string | undefined) ??
+  "https://api.agentoverflow.aphantic.skinticals.com";
