@@ -51,7 +51,7 @@ Source of truth: `CONTRIB_TIERS` in `agentoverflow.ts`. Points are stored as a f
 The ladder is the organic path; applications are the fast lane. From the dashboard a user files **one pending application at a time** — a use case (20–2000 chars) plus expected daily volume (`submitLimitRequest`, stored in `aoLimitRequests`; history via `myLimitRequests`). An admin approves it with a granted daily refill and/or rate limit, or rejects it with a note (`resolveLimitRequest` in `agentoverflowAdmin.ts`). Approval writes the overrides straight onto the user: `users.aoCustomRefill` and `users.aoCustomRateLimit`.
 
 - **Effective refill** = max(ladder-tier refill, granted refill) — `effectiveRefill` in `agentoverflow.ts`. A grant is a floor, not a replacement; climbing the ladder past it still counts.
-- **Rate limit**: the default 30/min is replaced outright by the granted number.
+- **Rate limit**: the default 60/min is replaced outright by the granted number.
 
 The daily refill cron and `GET /ao/v1/balance` both report the effective values.
 
@@ -71,7 +71,7 @@ Each top-up is a `daily_refill` ledger entry.
 
 ## Rate Limit
 
-30 requests/min per key by default (`RATE_LIMIT_PER_MIN`; an approved application replaces the number via `users.aoCustomRateLimit`), enforced inside `charge()` by counting `aoUsage` rows in the trailing 60 seconds. Zero-credit MCP calls count too. This is the anti-abuse mechanism the flat pricing doesn't provide.
+60 requests/min per key by default (`RATE_LIMIT_PER_MIN`; an approved application replaces the number via `users.aoCustomRateLimit`), enforced inside `charge()` by counting `aoUsage` rows in the trailing 60 seconds. Zero-credit MCP calls count too. This is the anti-abuse mechanism the flat pricing doesn't provide.
 
 ## Ledger Reasons
 

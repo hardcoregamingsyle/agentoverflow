@@ -121,7 +121,7 @@ Result payloads are the same JSON bodies documented in [api.md](./api.md), deliv
 
 ## One Core, Two Transports
 
-`agentoverflowHttp.ts` exports the operations (`runSearch`, `runAnswer`, `runLearn`, `runLearningsList`, `runBalance`), each resolving to an `AoOpResult`. The REST handlers turn that into an HTTP status plus JSON body; the MCP server (`agentoverflowMcp.ts`) turns the same result into a tool result. Validation, charging, refunds, and rate limiting exist exactly once — the MCP handlers just pass a cost of 0 into the same `runSearch`/`runAnswer`, and `charge()` with a zero amount skips the ledger but still enforces the limit and writes the usage row. The per-key rate limit (default **30 requests/min**) is shared across both transports, and MCP calls are attributed in usage logs as `mcp_search` / `mcp_answer`.
+`agentoverflowHttp.ts` exports the operations (`runSearch`, `runAnswer`, `runLearn`, `runLearningsList`, `runBalance`), each resolving to an `AoOpResult`. The REST handlers turn that into an HTTP status plus JSON body; the MCP server (`agentoverflowMcp.ts`) turns the same result into a tool result. Validation, charging, refunds, and rate limiting exist exactly once — the MCP handlers just pass a cost of 0 into the same `runSearch`/`runAnswer`, and `charge()` with a zero amount skips the ledger but still enforces the limit and writes the usage row. The per-key rate limit (default **60 requests/min**) is shared across both transports, and MCP calls are attributed in usage logs as `mcp_search` / `mcp_answer`.
 
 Consequence for maintainers: changing a `run*` signature or input rule in `agentoverflowHttp.ts` changes both APIs at once, and the hand-written tool `inputSchema`s in `agentoverflowMcp.ts` must be updated to match.
 
@@ -130,5 +130,5 @@ Consequence for maintainers: changing a `run*` signature or input rule in `agent
 | Symptom | Meaning | Fix |
 |---------|---------|-----|
 | HTTP 401 on every request | Key missing, malformed, or revoked | Mint a key on the dashboard; the header must be exactly `Authorization: Bearer ao_...` |
-| Tool result `isError` with `rate_limited` | Over the per-key limit — default 30/min, shared with REST; free calls count | Back off; the window is the trailing 60 seconds |
+| Tool result `isError` with `rate_limited` | Over the per-key limit — default 60/min, shared with REST; free calls count | Back off; the window is the trailing 60 seconds |
 | Tool result `isError` with `backend_unavailable` | Corpus VM unreachable or not configured | Nothing was charged (MCP calls are free; REST charges are refunded before the error goes out); retry once the VM is back |

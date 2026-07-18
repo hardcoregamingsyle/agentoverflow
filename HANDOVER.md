@@ -76,7 +76,7 @@ Source of truth for the ladder is `CONTRIB_TIERS` in `agentoverflow.ts` (Thalamu
 
 ### Manual overrides (tier-increase applications)
 
-The ladder has a fast lane: a user files one pending application at a time from the dashboard — use case (20–2000 chars) plus expected daily volume — into `aoLimitRequests` (`submitLimitRequest` / `myLimitRequests` in `agentoverflow.ts`), and the admin panel approves with a granted daily refill and/or rate limit or rejects with a note (`adminLimitRequests` / `resolveLimitRequest` in `agentoverflowAdmin.ts`). Grants land on the user as `users.aoCustomRefill` / `users.aoCustomRateLimit`: effective refill is max(ladder tier, grant) via `effectiveRefill`, while a granted rate limit replaces the default 30/min outright. The refill cron and `GET /ao/v1/balance` already report the effective numbers — don't stack math on top.
+The ladder has a fast lane: a user files one pending application at a time from the dashboard — use case (20–2000 chars) plus expected daily volume — into `aoLimitRequests` (`submitLimitRequest` / `myLimitRequests` in `agentoverflow.ts`), and the admin panel approves with a granted daily refill and/or rate limit or rejects with a note (`adminLimitRequests` / `resolveLimitRequest` in `agentoverflowAdmin.ts`). Grants land on the user as `users.aoCustomRefill` / `users.aoCustomRateLimit`: effective refill is max(ladder tier, grant) via `effectiveRefill`, while a granted rate limit replaces the default 60/min outright. The refill cron and `GET /ao/v1/balance` already report the effective numbers — don't stack math on top.
 
 ---
 
@@ -94,6 +94,6 @@ The ladder has a fast lane: a user files one pending application at a time from 
 
 1. **One VM, no HA.** Qdrant, Postgres, and the API share a box. Fine for the credit-funded phase; if this gets real traffic, split storage from serving before doing anything fancier.
 2. **Heuristic dump scores are votes, not truth.** Stack Overflow votes correlate with quality but reward age and popularity. The optional `rescore-llm` stage audits the top tiers; the long tail keeps its heuristic score.
-3. **Rate limiting is a table count** (default 30/min per key via `aoUsage`, custom grants included). Good enough now; becomes a hot row if one key gets very busy — and free MCP traffic hits the same table.
+3. **Rate limiting is a table count** (default 60/min per key via `aoUsage`, custom grants included). Good enough now; becomes a hot row if one key gets very busy — and free MCP traffic hits the same table.
 
 That's the list. Everything else that looked like debt got fixed instead of documented.
