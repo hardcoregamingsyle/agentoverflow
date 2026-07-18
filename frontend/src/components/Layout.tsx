@@ -91,7 +91,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <main className="flex-1">{children}</main>
 
-      <footer className="border-t border-border">
+      <footer className="relative z-10 border-t border-border bg-background/85 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8 space-y-4 text-[11px] text-muted-foreground">
           <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <Link to="/about" className="hover:text-foreground transition-colors">About</Link>

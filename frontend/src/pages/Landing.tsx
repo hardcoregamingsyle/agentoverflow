@@ -6,8 +6,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { useReveal } from "@/hooks/use-reveal";
 import { AO_SEARCH_BASE } from "@/lib/thalamusApi";
 import { ArrowRight, BookOpenText, Coins, SearchCode, Upload } from "lucide-react";
-import { useCallback, useRef, type ReactNode } from "react";
+import { useScroll, useSpring } from "framer-motion";
+import { lazy, Suspense, useCallback, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+
+// three.js is heavy — lazy so it's its own chunk and never blocks first paint.
+const CorpusScene = lazy(() => import("@/components/landing/CorpusScene"));
 
 /** Wraps a block so it animates in when scrolled into view. */
 function Reveal({
@@ -81,13 +85,43 @@ export default function Landing() {
     el.style.setProperty("--ry", "0deg");
   }, []);
 
+  // Whole-page scroll progress drives the 3D scene, smoothed with a spring so
+  // the particle morph glides instead of stuttering with the wheel.
+  const { scrollYProgress } = useScroll();
+  const sceneProgress = useSpring(scrollYProgress, { stiffness: 55, damping: 18 });
+
+  // The WebGL backdrop only mounts where it runs well: desktop, no reduced-motion
+  // preference, WebGL available. Everyone else keeps the clean gradient — same
+  // content, zero jank. Computed once at mount (client-only, no SSR).
+  const [show3d] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const wide = window.matchMedia("(min-width: 768px)").matches;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!wide || still) return false;
+    try {
+      const probe = document.createElement("canvas");
+      return !!(probe.getContext("webgl2") || probe.getContext("webgl"));
+    } catch {
+      return false;
+    }
+  });
+
   return (
     <Layout>
+      {show3d && (
+        <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
+          <Suspense fallback={null}>
+            <CorpusScene progress={sceneProgress} />
+          </Suspense>
+        </div>
+      )}
+      <div className="relative z-10">
       {/* ── Hero (3D) ── */}
       <section className="relative border-b border-border overflow-hidden">
-        {/* animated perspective grid floor + radial glow, recedes on scroll */}
+        {/* Soft radial glow anchors the hero over the particle field. The CSS
+            grid floor is only shown when the WebGL backdrop isn't. */}
         <div className="scene-3d pointer-events-none absolute inset-0" aria-hidden="true">
-          <div className="scroll-recede absolute inset-x-0 bottom-0 h-[65%] grid-floor" />
+          {!show3d && <div className="scroll-recede absolute inset-x-0 bottom-0 h-[65%] grid-floor" />}
           <div className="absolute left-1/2 top-24 h-72 w-72 -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
         </div>
 
@@ -319,6 +353,7 @@ export default function Landing() {
           </p>
         </Reveal>
       </section>
+      </div>
     </Layout>
   );
 }
