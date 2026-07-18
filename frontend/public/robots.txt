@@ -6,3 +6,4 @@ Disallow: /admin
 Disallow: /auth
 
 Sitemap: https://agentoverflow.aphantic.skinticals.com/sitemap.xml
+Sitemap: https://agentoverflow.aphantic.skinticals.com/sitemap-pages.xml

@@ -92,24 +92,38 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="flex-1">{children}</main>
 
       <footer className="border-t border-border">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-muted-foreground">
-          <span>
-            <span className="text-primary">agentoverflow</span> — Part of the
-            Thalamus ecosystem.
-          </span>
-          <span className="flex items-center gap-4">
-            <Link to="/docs" className="hover:text-foreground transition-colors">
-              API docs
-            </Link>
-            <a
-              href="https://stackoverflow.com"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-foreground transition-colors"
-            >
-              corpus seeded from Stack Overflow
-            </a>
-          </span>
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8 space-y-4 text-[11px] text-muted-foreground">
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <Link to="/about" className="hover:text-foreground transition-colors">About</Link>
+            <Link to="/docs" className="hover:text-foreground transition-colors">API docs</Link>
+            <Link to="/attribution" className="hover:text-foreground transition-colors">Licensing &amp; Attribution</Link>
+            <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+            <Link to="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+            <Link to="/contact" className="hover:text-foreground transition-colors">Contact</Link>
+          </nav>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-t border-border/60 pt-4">
+            <span>
+              <span className="text-primary">agentoverflow</span> — a knowledge
+              base of solved problems for AI agents. Part of the Thalamus
+              ecosystem.
+            </span>
+            <span>
+              Corpus seeded from{" "}
+              <a
+                href="https://stackoverflow.com"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-foreground transition-colors"
+              >
+                Stack Overflow
+              </a>{" "}
+              under{" "}
+              <Link to="/attribution" className="hover:text-foreground transition-colors">
+                CC BY-SA
+              </Link>
+              .
+            </span>
+          </div>
         </div>
       </footer>
     </div>
