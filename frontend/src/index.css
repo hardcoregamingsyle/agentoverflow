@@ -106,3 +106,94 @@
 ::-webkit-scrollbar-thumb:hover { background: oklch(0.62 0.20 250 / 0.6); }
 
 ::selection { background: oklch(0.62 0.20 250 / 0.25); color: oklch(0.96 0.008 240); }
+
+/* ══ Motion: scroll reveals + 3D hero ══════════════════════════════════════
+   Everything below is decorative and gated on prefers-reduced-motion: the page
+   reads identically with motion off (elements sit at their end state). */
+
+/* Reveal-on-scroll — .reveal starts offset, .is-visible (added by the reveal
+   hook when it scrolls into view) settles it. reveal-stagger cascades children. */
+.reveal,
+.reveal-stagger > * {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    opacity: 0;
+    transform: translateY(30px) rotateX(9deg);
+    transform-origin: center top;
+    transition: opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+    will-change: opacity, transform;
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+  .reveal-stagger > * {
+    opacity: 0;
+    transform: translateY(22px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal-stagger.is-visible > * {
+    opacity: 1;
+    transform: none;
+  }
+  .reveal-stagger.is-visible > *:nth-child(2) { transition-delay: 0.09s; }
+  .reveal-stagger.is-visible > *:nth-child(3) { transition-delay: 0.18s; }
+  .reveal-stagger.is-visible > *:nth-child(4) { transition-delay: 0.27s; }
+}
+
+/* 3D scene: a perspective wrapper + a tilt layer that reads --rx/--ry (set by
+   the pointer parallax handler) and, on scroll, recedes via the scroll timeline. */
+.scene-3d { perspective: 1100px; perspective-origin: 50% 40%; }
+
+.tilt-3d {
+  transform-style: preserve-3d;
+  transform: rotateX(var(--ry, 0deg)) rotateY(var(--rx, 0deg));
+  transition: transform 0.18s ease-out;
+}
+
+.layer-back { transform: translateZ(-60px); }
+.layer-mid { transform: translateZ(30px); }
+.layer-front { transform: translateZ(80px); }
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes float-y {
+    0%, 100% { transform: translateZ(80px) translateY(-7px); }
+    50% { transform: translateZ(80px) translateY(7px); }
+  }
+  .float-3d { animation: float-y 6s ease-in-out infinite; }
+
+  /* Perspective grid floor that drifts toward the viewer. */
+  @keyframes grid-drift {
+    from { background-position: 0 0; }
+    to { background-position: 0 48px; }
+  }
+  .grid-floor {
+    background-image:
+      linear-gradient(oklch(0.62 0.20 250 / 0.16) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(0.62 0.20 250 / 0.16) 1px, transparent 1px);
+    background-size: 48px 48px;
+    animation: grid-drift 3.2s linear infinite;
+    transform: rotateX(70deg);
+    transform-origin: center top;
+    mask-image: linear-gradient(to bottom, black, transparent 75%);
+    -webkit-mask-image: linear-gradient(to bottom, black, transparent 75%);
+  }
+
+  /* Native scroll-driven fade for the hero — no JS. Chromium runs it live;
+     other engines just skip it (the element stays put). */
+  @supports (animation-timeline: scroll()) {
+    .scroll-recede {
+      animation: scroll-recede linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 55vh;
+    }
+    @keyframes scroll-recede {
+      to { opacity: 0.15; transform: translateY(-40px) rotateX(24deg); }
+    }
+  }
+}
