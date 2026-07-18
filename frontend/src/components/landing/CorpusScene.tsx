@@ -11,6 +11,12 @@ import type { MotionValue } from "framer-motion";
 
 const PARTICLE_COUNT = 4500;
 
+// Hermite ease, clamped — same curve GLSL's smoothstep uses.
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
 const VERT = /* glsl */ `
   attribute vec3 aScattered;
   attribute float aSeed;
@@ -30,7 +36,7 @@ const VERT = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     vDepth = -mv.z;
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = (1.7 + aSeed * 2.3) * (300.0 / -mv.z);
+    gl_PointSize = (1.4 + aSeed * 1.9) * (300.0 / -mv.z);
   }
 `;
 
@@ -47,15 +53,17 @@ const FRAG = /* glsl */ `
     float alpha = smoothstep(0.5, 0.08, d);
 
     // AgentOverflow blue (hero) → cyan (deep scroll); rare gold sparks are the
-    // "gold tier" of the corpus.
-    vec3 blue = vec3(0.34, 0.48, 0.98);
-    vec3 cyan = vec3(0.28, 0.80, 0.86);
-    vec3 gold = vec3(0.98, 0.75, 0.30);
+    // "gold tier" of the corpus. Colors kept deep and alpha low: this material
+    // blends additively, so overlapping particles SUM — bright colors at high
+    // alpha clip to a white blob wherever the globe is dense.
+    vec3 blue = vec3(0.24, 0.36, 0.92);
+    vec3 cyan = vec3(0.16, 0.62, 0.74);
+    vec3 gold = vec3(0.95, 0.68, 0.22);
     vec3 color = mix(blue, cyan, uMorph);
     color = mix(color, gold, step(0.96, vSeed) * 0.9); // ~4% gold-tier sparks
 
-    float fade = clamp(1.6 - vDepth * 0.12, 0.25, 1.0);
-    gl_FragColor = vec4(color, alpha * 0.75 * fade);
+    float fade = clamp(1.6 - vDepth * 0.12, 0.2, 1.0);
+    gl_FragColor = vec4(color, alpha * 0.42 * fade);
   }
 `;
 
@@ -95,17 +103,20 @@ function CorpusCloud({ progress }: { progress: MotionValue<number> }) {
     const p = progress.get();
     if (material.current) {
       material.current.uniforms.uTime.value = clock.elapsedTime;
-      // Globe holds through the hero, dissolves across the middle, re-gathers a
-      // little for the closing section.
-      const morph = p < 0.72 ? Math.min(1, p * 1.7) : Math.max(0.55, 1 - (p - 0.72) * 2.2);
-      material.current.uniforms.uMorph.value = morph;
+      // Three acts, all smoothstep-eased so no segment starts or ends with a
+      // visible kink: the globe holds through the hero, disperses across the
+      // middle sections, hangs as a field, then fully re-gathers for the
+      // closing CTA — the journey ends where it began.
+      const disperse = smoothstep(0.12, 0.55, p);
+      const regather = smoothstep(0.74, 0.98, p);
+      material.current.uniforms.uMorph.value = disperse * (1 - regather);
     }
     if (points.current) {
-      points.current.rotation.y = clock.elapsedTime * 0.04 + p * Math.PI * 1.35;
-      points.current.rotation.x = Math.sin(p * Math.PI) * 0.2;
+      points.current.rotation.y = clock.elapsedTime * 0.04 + p * Math.PI * 1.2;
+      points.current.rotation.x = Math.sin(p * Math.PI) * 0.18;
     }
-    camera.position.z = 6.2 - p * 1.6;
-    camera.position.y = p * -0.7;
+    camera.position.z = 6.2 - smoothstep(0, 1, p) * 1.5;
+    camera.position.y = Math.sin(p * Math.PI) * -0.6;
     camera.lookAt(0, 0, 0);
   });
 
@@ -135,10 +146,14 @@ function CoreFrame({ progress }: { progress: MotionValue<number> }) {
   useFrame(({ clock }) => {
     if (!mesh.current) return;
     const p = progress.get();
+    const disperse = smoothstep(0.12, 0.55, p);
+    const regather = smoothstep(0.74, 0.98, p);
+    const m = disperse * (1 - regather);
     mesh.current.rotation.y = -clock.elapsedTime * 0.06;
     mesh.current.rotation.z = p * Math.PI * 0.5;
-    mesh.current.scale.setScalar(Math.max(0.5, 1 - p * 0.35));
-    (mesh.current.material as THREE.MeshBasicMaterial).opacity = 0.1 * (1 - p * 0.6);
+    mesh.current.scale.setScalar(1 - m * 0.4);
+    // Brightest when the globe is whole (hero + closing), fades while dispersed.
+    (mesh.current.material as THREE.MeshBasicMaterial).opacity = 0.09 * (1 - m * 0.85);
   });
   return (
     <mesh ref={mesh}>
@@ -152,7 +167,7 @@ export default function CorpusScene({ progress }: { progress: MotionValue<number
   return (
     <Canvas
       camera={{ position: [0, 0, 6.2], fov: 46 }}
-      dpr={[1, 1.75]}
+      dpr={[1, 1.5]}
       gl={{ antialias: false, powerPreference: "high-performance", alpha: true }}
       style={{ position: "absolute", inset: 0 }}
       aria-hidden
