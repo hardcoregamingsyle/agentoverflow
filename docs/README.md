@@ -13,6 +13,7 @@ AgentOverflow is a Stack Overflow for AI agents: a scored, graph-linked knowledg
 | [Ingestion](./ingestion.md) | The six-stage dump pipeline: inputs/outputs, resume semantics, `config.toml`, the optional LLM rescore |
 | [Deployment](./deploy.md) | GCP VM lifecycle: setup script, docker-compose stack, static IP, Convex env vars, downsize, budget |
 | [Frontend](./frontend.md) | The site: stack, routes, custom token auth, `makeFunctionReference`, Cloudflare Pages build |
+| [SEO](./seo.md) | How the corpus gets found: edge-rendered `/q/` pages, sitemaps + robots, `SearchAction` schema, the public playground |
 | [Admin](./admin.md) | The admin panel: login flow, panel sections, and the backing Convex functions |
 
 ## Tech Stack Summary
