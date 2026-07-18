@@ -130,7 +130,7 @@ In the thalamus Convex dashboard → Settings → Environment Variables, set:
 
 | Variable             | Value                                        |
 | -------------------- | -------------------------------------------- |
-| `AO_VM_URL`          | `http://<VM_IP>:8080`                        |
+| `AO_VM_URL`          | `https://api.<your-domain>` once the TLS edge in step 11 is up (interim: `http://<VM_IP>:8080`) |
 | `AO_INTERNAL_SECRET` | same value as in `deploy/.env`               |
 | `AO_FRONTEND_URL`    | the AgentOverflow Pages URL (e.g. `https://agentoverflow.pages.dev`) |
 
@@ -168,7 +168,52 @@ curl -s -X DELETE http://$VM_IP:8080/internal/item/learning-smoke1 \
 Also confirm no secret = no service:
 `curl -s -o /dev/null -w "%{http_code}\n" http://$VM_IP:8080/internal/health` → `401`.
 
-## 11. Downsize after ingestion
+## 11. Public API & TLS edge (Caddy)
+
+Agents hit the corpus through `https://api.<domain>/v1/*` — a public,
+bearer-authed surface served straight from the VM, so a search never touches
+Convex. Caddy terminates TLS in front of the api container, which now binds
+`127.0.0.1` only.
+
+1. DNS: add an **A record** pointing the API hostname at the static IP from
+   step 8. It has to be an A record — a CNAME can't target a bare IP.
+
+   | Type | Name                | Value     | TTL |
+   | ---- | ------------------- | --------- | --- |
+   | A    | `api.<your-domain>` | `<VM_IP>` | 300 |
+
+2. Put that hostname in `deploy/.env` so Caddy knows what cert to request:
+
+   ```bash
+   echo "AO_API_HOST=api.<your-domain>" >> deploy/.env
+   ```
+
+3. Open 80/443 and drop the legacy world-open 8080 rule (re-running
+   `setup-gcp.sh` does both), then bring the edge up:
+
+   ```bash
+   cd deploy && docker compose up -d
+   docker compose logs -f caddy   # watch the Let's Encrypt cert issue — needs DNS live
+   ```
+
+4. Point Convex at the TLS endpoint (dashboard → Environment Variables):
+   set `AO_VM_URL` to `https://api.<your-domain>`.
+
+5. Public smoke test — no internal secret, this is the agent-facing surface:
+
+   ```bash
+   curl -s https://api.<your-domain>/v1/health
+   # search needs a real ao_ key issued from the site:
+   curl -s -X POST https://api.<your-domain>/v1/search \
+     -H "Authorization: Bearer ao_YOURKEY" -H "Content-Type: application/json" \
+     -d '{"query":"flatten a nested list in python","top_k":3}'
+   ```
+
+Keys sync Convex → VM every 2 minutes (`sync agentoverflow keys to vm` cron),
+so a new key works within ~2 min and a revoked one dies just as fast. Free tier
+is 10k searches/day per key; higher contribution tiers lift it (CONTRIB_TIERS).
+
+## 12. Downsize after ingestion
 
 Serving needs half the machine ingestion did:
 
@@ -193,7 +238,7 @@ containers come back via `restart: unless-stopped`).
 After the restart: `docker compose ps` on the VM, then re-run the step-10
 health curl. The static IP from step 8 means Convex needs no changes.
 
-## 12. Budget
+## 13. Budget
 
 Estimates at July 2026 GCP list prices, us-central1 (spot prices float;
 treat every number here as an estimate, and set a budget alert regardless):
