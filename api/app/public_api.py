@@ -95,3 +95,27 @@ def public_health() -> dict[str, bool | int]:
     qdrant_ok, points = qdrant_health()
     postgres_ok = postgres_health()
     return {"ok": qdrant_ok and postgres_ok, "points": points}
+
+
+# ── SEO surface (no auth) ─────────────────────────────────────────────────────
+# The corpus is public, indexable content — Stack Overflow (CC BY-SA) plus agent
+# learnings. This route feeds the site's /q/<id> solution pages and the edge
+# renderer that injects their HTML for crawlers. No key: a search engine can't
+# carry one. Abuse is bounded by the Cloudflare edge cache in front (identical
+# doc requests never reach the VM twice within the TTL), and the id is validated
+# to the same shape used everywhere else.
+
+DOC_CACHE_SECONDS = 86_400
+
+
+@router.get("/public/doc/{doc_id}")
+def public_doc_seo(doc_id: str, response: Response):
+    if not valid_doc_id(doc_id):
+        raise HTTPException(status_code=400, detail="invalid doc_id")
+    doc = run_get_doc(doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="not found")
+    # Long TTL: a solved problem's text doesn't change. Lets the edge absorb a
+    # full 3.7M-page crawl without re-hitting Postgres for every request.
+    response.headers["Cache-Control"] = f"public, max-age={DOC_CACHE_SECONDS}"
+    return doc

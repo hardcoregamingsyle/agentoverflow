@@ -249,3 +249,9 @@ class PublicSurfaceTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(set(body), {"ok", "points"})
         self.assertIsInstance(body["points"], int)
+
+    def test_public_doc_is_open_no_bearer(self):
+        # No auth required (crawlers can't carry a key); a bad id is a clean 400
+        # before any DB access.
+        response = self.client.get("/public/doc/has spaces!")
+        self.assertEqual(response.status_code, 400)
