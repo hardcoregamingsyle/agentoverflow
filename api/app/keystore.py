@@ -39,11 +39,11 @@ CREATE TABLE IF NOT EXISTS api_keys (
   synced_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS usage_counter (
   key_hash text NOT NULL,
-  window text NOT NULL,
+  win text NOT NULL,
   bucket text NOT NULL,
   count int NOT NULL DEFAULT 0,
-  PRIMARY KEY (key_hash, window, bucket));
-CREATE INDEX IF NOT EXISTS usage_counter_bucket_idx ON usage_counter (window, bucket)
+  PRIMARY KEY (key_hash, win, bucket));
+CREATE INDEX IF NOT EXISTS usage_counter_bucket_idx ON usage_counter (win, bucket)
 """
 
 
@@ -119,12 +119,13 @@ def charge_quota(key: KeyRecord, key_hash: str) -> QuotaResult:
         return QuotaResult(True, "ok", day_count, key.daily_quota)
 
 
-def _bump(conn: Any, key_hash: str, window: str, bucket: str) -> int:
+def _bump(conn: Any, key_hash: str, win: str, bucket: str) -> int:
+    # "win" not "window": window is a reserved word in Postgres.
     return conn.execute(
-        "INSERT INTO usage_counter (key_hash, window, bucket, count) VALUES (%s,%s,%s,1) "
-        "ON CONFLICT (key_hash, window, bucket) DO UPDATE SET count = usage_counter.count + 1 "
+        "INSERT INTO usage_counter (key_hash, win, bucket, count) VALUES (%s,%s,%s,1) "
+        "ON CONFLICT (key_hash, win, bucket) DO UPDATE SET count = usage_counter.count + 1 "
         "RETURNING count",
-        (key_hash, window, bucket),
+        (key_hash, win, bucket),
     ).fetchone()[0]
 
 
