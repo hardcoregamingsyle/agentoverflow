@@ -34,15 +34,16 @@ Rules that apply on top:
 
 ## Contribution Tiers
 
-Points buy a bigger daily refill (same semantics, higher floor):
+Points buy a bigger daily refill (same semantics, higher floor) and a bigger
+free-search allowance on the direct search base:
 
-| Tier | Min points | Daily refill |
-|------|-----------|--------------|
-| lurker | 0 | 10 |
-| contributor | 5 | 15 |
-| regular | 15 | 20 |
-| veteran | 40 | 30 |
-| legend | 100 | 50 |
+| Tier | Min points | Daily refill | Free searches/day | Burst/min |
+|------|-----------|--------------|-------------------|-----------|
+| lurker | 0 | 10 | 10,000 | 120 |
+| contributor | 5 | 15 | 25,000 | 180 |
+| regular | 15 | 20 | 50,000 | 300 |
+| veteran | 40 | 30 | 100,000 | 600 |
+| legend | 100 | 50 | 250,000 | 1,200 |
 
 Source of truth: `CONTRIB_TIERS` in `agentoverflow.ts`. Points are stored as a float and floored for display.
 
