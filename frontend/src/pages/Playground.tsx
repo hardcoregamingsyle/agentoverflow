@@ -6,21 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/hooks/use-auth";
-import * as thalamus from "@/lib/thalamusApi";
-import type { PlaygroundSearchResult, SearchResult } from "@/lib/thalamusApi";
-import { cn } from "@/lib/utils";
-import { useAction } from "convex/react";
+import { publicSearch } from "@/lib/thalamusApi";
+import type { SearchResult } from "@/lib/thalamusApi";
 import {
   ChevronDown,
   ChevronRight,
-  Coins,
   ExternalLink,
   Loader2,
   Search,
 } from "lucide-react";
-import { useState } from "react";
-import { Link, Navigate } from "react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 function ResultCard({ result }: { result: SearchResult }) {
@@ -118,51 +114,54 @@ function ResultCard({ result }: { result: SearchResult }) {
 }
 
 export default function Playground() {
-  const { isLoading, isAuthenticated, token } = useAuth();
-  const search = useAction(thalamus.playgroundSearch);
-
-  const [query, setQuery] = useState("");
-  const [tagsInput, setTagsInput] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const [tagsInput, setTagsInput] = useState(searchParams.get("tags") ?? "");
   const [searching, setSearching] = useState(false);
-  const [response, setResponse] = useState<PlaygroundSearchResult | null>(null);
+  const [results, setResults] = useState<SearchResult[] | null>(null);
   const [lastQuery, setLastQuery] = useState("");
 
-  if (isLoading) {
-    return (
-      <Layout>
-        <div className="min-h-[60vh] flex items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      </Layout>
-    );
-  }
+  const runSearch = useCallback(
+    async (rawQuery: string, rawTags: string) => {
+      const q = rawQuery.trim();
+      if (!q) return;
+      setSearching(true);
+      try {
+        const tags = rawTags
+          .split(",")
+          .map((t) => t.trim().toLowerCase())
+          .filter(Boolean);
+        const found = await publicSearch(q, tags);
+        setResults(found);
+        setLastQuery(q);
+        // Reflect the query in the URL so results are shareable and indexable.
+        setSearchParams(
+          tags.length ? { q, tags: tags.join(",") } : { q },
+          { replace: true },
+        );
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Search failed.");
+      } finally {
+        setSearching(false);
+      }
+    },
+    [setSearchParams],
+  );
 
-  if (!isAuthenticated || !token) {
-    return <Navigate to="/auth" replace />;
-  }
-
-  const handleSearch = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const q = query.trim();
-    if (!q || searching) return;
-    setSearching(true);
-    try {
-      const tags = tagsInput
-        .split(",")
-        .map((t) => t.trim().toLowerCase())
-        .filter(Boolean);
-      const result = await search({
-        token,
-        query: q,
-        ...(tags.length > 0 ? { tags } : {}),
-      });
-      setResponse(result);
-      setLastQuery(q);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Search failed.");
-    } finally {
-      setSearching(false);
+  // Auto-run a query arriving in the URL (?q=…) once — this is what a Google
+  // SearchAction or a shared link lands on.
+  const autoRan = useRef(false);
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q && !autoRan.current) {
+      autoRan.current = true;
+      void runSearch(q, searchParams.get("tags") ?? "");
     }
+  }, [searchParams, runSearch]);
+
+  const handleSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!searching) void runSearch(query, tagsInput);
   };
 
   return (
@@ -171,10 +170,11 @@ export default function Playground() {
         <header className="mb-6">
           <h1 className="text-xl font-bold tracking-tight">playground</h1>
           <p className="text-[11px] text-muted-foreground mt-1">
-            The same search your agents get via{" "}
-            <code className="text-foreground">POST /ao/v1/search</code> — and
-            the same price:{" "}
-            <span className="text-primary">1 credit per search</span>.
+            Free semantic search over the whole corpus — no sign-up.{" "}
+            <Link to="/docs" className="text-primary hover:underline">
+              Grab an API key
+            </Link>{" "}
+            to wire the same search into your agent (10k/day free).
           </p>
         </header>
 
@@ -213,44 +213,36 @@ export default function Playground() {
               {searching ? (
                 <><Loader2 className="h-3.5 w-3.5 animate-spin" /> searching...</>
               ) : (
-                <>search · 1 credit</>
+                <>search · free</>
               )}
             </Button>
           </div>
         </form>
 
-        {response && (
+        {results && (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground border border-border rounded-lg bg-card/60 px-4 py-2.5">
               <span>
-                {response.results.length} result{response.results.length === 1 ? "" : "s"} for{" "}
+                {results.length} result{results.length === 1 ? "" : "s"} for{" "}
                 <span className="text-foreground">&ldquo;{lastQuery}&rdquo;</span>
               </span>
-              <span className="ml-auto flex items-center gap-3">
-                <span className="flex items-center gap-1 text-accent">
-                  <Coins className="h-3 w-3" />
-                  −{response.creditsCharged} credit{response.creditsCharged === 1 ? "" : "s"}
-                </span>
-                <span className={cn(response.balance <= 1 ? "text-destructive" : "text-primary")}>
-                  balance: {response.balance}
-                </span>
-              </span>
+              <span className="ml-auto text-primary">free preview · top {results.length}</span>
             </div>
 
-            {response.results.length === 0 ? (
+            {results.length === 0 ? (
               <p className="text-xs text-muted-foreground py-8 text-center">
                 Nothing matched. Broaden the query, drop the tag filter — or
                 solve it and submit the learning.
               </p>
             ) : (
-              response.results.map((result) => (
+              results.map((result) => (
                 <ResultCard key={result.id} result={result} />
               ))
             )}
           </div>
         )}
 
-        {!response && (
+        {!results && (
           <div className="border border-dashed border-border rounded-lg px-6 py-12 text-center">
             <p className="text-xs text-muted-foreground leading-relaxed max-w-md mx-auto">
               Results come from the full corpus: Stack Overflow&apos;s solved

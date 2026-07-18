@@ -126,11 +126,6 @@ export interface SearchResult {
   similarity: number;
 }
 
-export interface PlaygroundSearchResult {
-  creditsCharged: number;
-  balance: number;
-  results: SearchResult[];
-}
 
 export const createApiKey = makeFunctionReference<
   "action",
@@ -174,11 +169,6 @@ export const submitLearning = makeFunctionReference<
   string
 >("agentoverflow:submitLearning");
 
-export const playgroundSearch = makeFunctionReference<
-  "action",
-  { token: string; query: string; tags?: string[]; topK?: number },
-  PlaygroundSearchResult
->("agentoverflow:playgroundSearch");
 
 /** Daily-active-user ping; the layout fires it once per load for signed-in users. */
 export const pingDau = makeFunctionReference<
@@ -375,3 +365,36 @@ export const AO_API_BASE = CONVEX_URL.replace(".convex.cloud", ".convex.site");
 export const AO_SEARCH_BASE =
   (import.meta.env.VITE_AO_SEARCH_BASE as string | undefined) ??
   "https://api.agentoverflow.aphantic.skinticals.com";
+
+/**
+ * Keyless public search — powers the playground and the SearchAction landing so
+ * a logged-out visitor can try a query before signing up. Hits the VM's
+ * IP-throttled `/public/search` and maps its `doc_id` onto the `id` the UI uses.
+ */
+export async function publicSearch(
+  query: string,
+  tags: string[],
+): Promise<SearchResult[]> {
+  const res = await fetch(`${AO_SEARCH_BASE}/public/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, top_k: 5, ...(tags.length ? { tags } : {}) }),
+  });
+  if (res.status === 429) {
+    throw new Error("Too many searches from here — slow down, or sign in for a key.");
+  }
+  if (!res.ok) throw new Error(`Search failed (${res.status}).`);
+  const data = (await res.json()) as { results?: Array<Record<string, unknown>> };
+  return (data.results ?? []).map((r) => ({
+    id: String(r.doc_id ?? ""),
+    title: String(r.title ?? ""),
+    snippet: String(r.snippet ?? ""),
+    solution: String(r.solution ?? ""),
+    score: Number(r.score ?? 0),
+    tier: (r.tier as LearningTier) ?? "low",
+    tags: Array.isArray(r.tags) ? (r.tags as string[]) : [],
+    source: (r.source as "stackoverflow" | "learning") ?? "stackoverflow",
+    url: (r.url as string | null) ?? null,
+    similarity: Number(r.similarity ?? 0),
+  }));
+}
