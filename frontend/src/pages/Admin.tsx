@@ -937,6 +937,141 @@ function UsersTable({
 
 /* ── dashboard ── */
 
+function AdminKeysPanel({ token }: { token: string }) {
+  const convex = useConvex();
+  const createKey = useAction(thalamus.createAdminKey);
+  const revoke = useAction(thalamus.revokeKey);
+
+  const [keys, setKeys] = useState<thalamus.AdminKey[] | null>(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [freshKey, setFreshKey] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setKeys(await convex.query(thalamus.listAdminKeys, { adminToken: token }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load admin keys.");
+    }
+  }, [convex, token]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleCreate = async () => {
+    const n = name.trim();
+    if (!n || busy) return;
+    setBusy(true);
+    try {
+      const res = await createKey({ adminToken: token, name: n });
+      setFreshKey(res.fullKey);
+      setName("");
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create key.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRevoke = async (keyId: string) => {
+    try {
+      await revoke({ adminToken: token, keyId });
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to revoke key.");
+    }
+  };
+
+  return (
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
+        <CardTitle className="text-sm font-mono flex items-center gap-2">
+          <Shield className="h-3.5 w-3.5" /> admin keys
+        </CardTitle>
+        <CardDescription className="text-[11px]">
+          Unlimited requests, no rate limit, no credits, gold-tier visible. Mint
+          sparingly — these bypass every guardrail.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="px-5 space-y-4">
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+          <div className="flex-1 space-y-1.5">
+            <Label htmlFor="admin-key-name" className="text-[10px] text-muted-foreground font-bold tracking-widest">
+              KEY NAME
+            </Label>
+            <Input
+              id="admin-key-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. internal-eval, thalamus-pipeline"
+              className="text-xs font-mono h-9"
+              disabled={busy}
+            />
+          </div>
+          <Button onClick={handleCreate} disabled={!name.trim() || busy} className="text-xs font-bold h-9">
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "create admin key"}
+          </Button>
+        </div>
+
+        {freshKey && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 space-y-1.5">
+            <p className="text-[10px] uppercase tracking-widest text-primary">
+              copy it now — shown once
+            </p>
+            <code className="block text-xs font-mono break-all text-foreground">{freshKey}</code>
+            <button
+              className="text-[10px] text-muted-foreground hover:text-foreground"
+              onClick={() => setFreshKey(null)}
+            >
+              dismiss
+            </button>
+          </div>
+        )}
+
+        {keys === null ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : keys.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">No admin keys yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-[10px] uppercase tracking-wider">name</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">prefix</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">last used</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-right">actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {keys.map((k) => (
+                <TableRow key={k.keyId}>
+                  <TableCell className="text-xs">{k.name}</TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground">{k.keyPrefix}</TableCell>
+                  <TableCell className="text-[11px] text-muted-foreground">
+                    {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "never"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-[11px] text-destructive hover:text-destructive"
+                      onClick={() => handleRevoke(k.keyId)}
+                    >
+                      revoke
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface AdminData {
   stats: AdminStats;
   series: AdminUsagePoint[];
@@ -1126,6 +1261,7 @@ function AdminDashboard({
               requests={data.limitRequests}
               onResolve={handleResolveLimitRequest}
             />
+            <AdminKeysPanel token={token} />
             <LearningsTable
               learnings={data.learnings}
               onDelete={handleDeleteLearning}

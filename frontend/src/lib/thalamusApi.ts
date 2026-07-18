@@ -339,6 +339,34 @@ export const adminLimitRequests = makeFunctionReference<
   AdminLimitRequest[]
 >("agentoverflowAdmin:adminLimitRequests");
 
+/** An admin API key as the panel lists it (never the full secret). */
+export interface AdminKey {
+  keyId: string;
+  name: string;
+  keyPrefix: string;
+  createdAt: number;
+  lastUsedAt?: number;
+}
+
+export const listAdminKeys = makeFunctionReference<
+  "query",
+  { adminToken: string },
+  AdminKey[]
+>("agentoverflowAdmin:listAdminKeys");
+
+/** Returns the full key exactly once — unlimited requests, gold visible. */
+export const createAdminKey = makeFunctionReference<
+  "action",
+  { adminToken: string; name: string },
+  { keyId: string; fullKey: string; keyPrefix: string }
+>("agentoverflowAdmin:createAdminKey");
+
+export const revokeKey = makeFunctionReference<
+  "action",
+  { adminToken: string; keyId: string },
+  { ok: boolean }
+>("agentoverflowAdmin:revokeKey");
+
 export const resolveLimitRequest = makeFunctionReference<
   "mutation",
   {
