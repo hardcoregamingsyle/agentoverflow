@@ -1,13 +1,50 @@
-# Caddy fronts the whole VM API. It terminates TLS (Let's Encrypt, auto-renewed)
-# for the API hostname and reverse-proxies every path to the api container over
-# the compose network. Two consequences that matter:
+# Caddy fronts the whole AgentOverflow API under one hostname, so nothing public
+# ever needs to name the Convex deployment slug. TLS is Let's Encrypt (auto).
 #
-#   * /v1/* (public, bearer-auth) and /internal/* (Convex, secret-auth) are both
-#     HTTPS now — the X-AO-Internal-Secret no longer rides cleartext HTTP.
-#   * the api container binds 127.0.0.1 only, so this is the sole way in.
+# Routing:
+#   * /v1/search, /v1/doc, /public/*, /internal/*  -> the VM api container (free
+#     search + doc reads + SEO feed + Convex's secret-auth internal calls).
+#   * /v1/answer, /v1/learn, /v1/learnings, /v1/balance, /mcp -> reverse-proxied
+#     to Convex (that's where the credit economy and LLM synthesis live). They're
+#     rewritten to the platform's /ao/* paths on the way out, so a client only
+#     ever sees https://<AO_API_HOST>/v1/* and /mcp.
 #
-# AO_API_HOST comes from deploy/.env (e.g. api.agentoverflow.aphantic.skinticals.com).
+# The api container binds 127.0.0.1 only, so this is the sole way in.
+# AO_API_HOST + AO_CONVEX_HOST come from deploy/.env.
+
+(to_convex) {
+	reverse_proxy https://{$AO_CONVEX_HOST} {
+		header_up Host {$AO_CONVEX_HOST}
+	}
+}
+
 {$AO_API_HOST} {
 	encode zstd gzip
-	reverse_proxy api:8080
+
+	# Credit / account / LLM ops + MCP: fronted from Convex, slug hidden.
+	handle /v1/answer {
+		rewrite * /ao/v1/answer
+		import to_convex
+	}
+	handle /v1/learn {
+		rewrite * /ao/v1/learn
+		import to_convex
+	}
+	handle /v1/learnings {
+		rewrite * /ao/v1/learnings
+		import to_convex
+	}
+	handle /v1/balance {
+		rewrite * /ao/v1/balance
+		import to_convex
+	}
+	handle /mcp {
+		rewrite * /ao/mcp
+		import to_convex
+	}
+
+	# Everything else — free search, doc reads, SEO feeds, internal API — is the VM.
+	handle {
+		reverse_proxy api:8080
+	}
 }

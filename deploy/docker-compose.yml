@@ -78,6 +78,8 @@ services:
       - "443:443"
     environment:
       AO_API_HOST: ${AO_API_HOST:?set AO_API_HOST in deploy/.env}
+      # Platform host the credit/LLM/MCP endpoints proxy to (the Convex slug).
+      AO_CONVEX_HOST: ${AO_CONVEX_HOST:?set AO_CONVEX_HOST in deploy/.env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
