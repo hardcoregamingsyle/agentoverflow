@@ -7,7 +7,7 @@ import { useReveal } from "@/hooks/use-reveal";
 import { AO_SEARCH_BASE } from "@/lib/thalamusApi";
 import { ArrowRight, BookOpenText, Coins, SearchCode, Upload } from "lucide-react";
 import { useScroll, useSpring } from "framer-motion";
-import { lazy, Suspense, useCallback, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 // three.js is heavy — lazy so it's its own chunk and never blocks first paint.
@@ -105,19 +105,40 @@ export default function Landing() {
 
   // The WebGL backdrop only mounts where it runs well: desktop, no reduced-motion
   // preference, WebGL available. Everyone else keeps the clean gradient — same
-  // content, zero jank. Computed once at mount (client-only, no SSR).
-  const [show3d] = useState(() => {
-    if (typeof window === "undefined") return false;
+  // content, zero jank. And even where it runs, we DEFER the mount until the
+  // browser is idle after first paint, so the three.js chunk and its render loop
+  // never compete with LCP or the initial main-thread budget (which is what
+  // tanked the Lighthouse score — a continuously-animating canvas on load).
+  const [show3d, setShow3d] = useState(false);
+  useEffect(() => {
     const wide = window.matchMedia("(min-width: 768px)").matches;
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!wide || still) return false;
+    if (!wide || still) return;
+    let capable = false;
     try {
       const probe = document.createElement("canvas");
-      return !!(probe.getContext("webgl2") || probe.getContext("webgl"));
+      capable = !!(probe.getContext("webgl2") || probe.getContext("webgl"));
     } catch {
-      return false;
+      capable = false;
     }
-  });
+    if (!capable) return;
+
+    const win = window as typeof window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    let idleId = 0;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    if (win.requestIdleCallback) {
+      idleId = win.requestIdleCallback(() => setShow3d(true), { timeout: 2500 });
+    } else {
+      timerId = setTimeout(() => setShow3d(true), 1500);
+    }
+    return () => {
+      if (idleId && win.cancelIdleCallback) win.cancelIdleCallback(idleId);
+      if (timerId) clearTimeout(timerId);
+    };
+  }, []);
 
   return (
     <Layout>

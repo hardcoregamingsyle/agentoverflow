@@ -4,12 +4,13 @@
 // AgentOverflow blue toward cyan and the camera pushes in. Rare gold particles
 // are a nod to gold-tier learnings. Lazy-loaded from Landing so the three.js
 // chunk never blocks first paint.
-import { Canvas, useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { MotionValue } from "framer-motion";
 
-const PARTICLE_COUNT = 3000;
+const PARTICLE_COUNT = 2000;
+const TARGET_FPS = 30;
 
 // Hermite ease, clamped — same curve GLSL's smoothstep uses.
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -36,7 +37,10 @@ const VERT = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     vDepth = -mv.z;
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = (1.0 + aSeed * 1.5) * (300.0 / -mv.z);
+    // Smaller sprites than the original 300/-mv.z: additive point sprites are
+    // pure overdraw, and overdraw is the dominant cost under software WebGL
+    // (headless Lighthouse). Halving the radius roughly quarters the fill work.
+    gl_PointSize = (0.8 + aSeed * 1.1) * (170.0 / -mv.z);
   }
 `;
 
@@ -174,15 +178,43 @@ function CoreFrame({ progress }: { progress: MotionValue<number> }) {
   );
 }
 
+// Cap the render loop at TARGET_FPS. With frameloop="demand" the Canvas only
+// renders when invalidate() is called, so this ticker is the single throttle:
+// ~30 renders/sec instead of the display's 60–144, roughly halving main-thread
+// (and, under software WebGL, GPU-on-CPU) time — the difference between frames
+// that clear the 50ms long-task bar and frames that pile up as blocking time.
+function FrameThrottle() {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    let raf = 0;
+    let last = 0;
+    const interval = 1000 / TARGET_FPS;
+    const tick = (t: number) => {
+      raf = requestAnimationFrame(tick);
+      if (t - last >= interval) {
+        last = t;
+        invalidate();
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [invalidate]);
+  return null;
+}
+
 export default function CorpusScene({ progress }: { progress: MotionValue<number> }) {
   return (
     <Canvas
       camera={{ position: [0, 0, 7.4], fov: 46 }}
-      dpr={[1, 1.5]}
+      // dpr 1 (was up to 1.5): halves the pixel count the fragment shader fills.
+      dpr={1}
+      // Render on demand, throttled by FrameThrottle, instead of every vsync.
+      frameloop="demand"
       gl={{ antialias: false, powerPreference: "high-performance", alpha: true }}
       style={{ position: "absolute", inset: 0 }}
       aria-hidden
     >
+      <FrameThrottle />
       <CorpusCloud progress={progress} />
       <CoreFrame progress={progress} />
     </Canvas>
