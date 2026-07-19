@@ -79,7 +79,10 @@ export function Layout({ children }: { children: ReactNode }) {
             ) : (
               <Button
                 size="sm"
-                className="text-xs font-bold"
+                // Deeper than the brand --primary so white label text clears
+                // WCAG AA (4.5:1) at this small bold size — the mid-blue primary
+                // only reaches ~3:1 with white.
+                className="text-xs font-bold bg-[oklch(0.48_0.20_250)] hover:bg-[oklch(0.44_0.20_250)]"
                 onClick={() => navigate("/auth")}
               >
                 sign in
