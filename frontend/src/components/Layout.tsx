@@ -99,6 +99,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link to="/attribution" className="hover:text-foreground transition-colors">Licensing &amp; Attribution</Link>
             <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
             <Link to="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+            <Link to="/dmca" className="hover:text-foreground transition-colors">DMCA</Link>
             <Link to="/contact" className="hover:text-foreground transition-colors">Contact</Link>
           </nav>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-t border-border/60 pt-4">

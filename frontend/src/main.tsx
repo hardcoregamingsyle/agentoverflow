@@ -18,6 +18,7 @@ const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Attribution = lazy(() => import("./pages/Attribution"));
 const Contact = lazy(() => import("./pages/Contact"));
+const Dmca = lazy(() => import("./pages/Dmca"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Without a boundary, a failed lazy-route chunk (typical after a deploy purges
@@ -84,6 +85,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/terms" element={<Terms />} />
               <Route path="/attribution" element={<Attribution />} />
               <Route path="/contact" element={<Contact />} />
+              <Route path="/dmca" element={<Dmca />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
