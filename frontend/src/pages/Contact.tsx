@@ -27,6 +27,12 @@ export default function Contact() {
             github.com/hardcoregamingsyle/agentoverflow/issues
           </a>
         </p>
+        <p>
+          Prefer email? Reach the maintainer directly at{" "}
+          <a href="mailto:hardcorgamingstyle@gmail.com" className="text-primary hover:underline">
+            hardcorgamingstyle@gmail.com
+          </a>.
+        </p>
       </LegalSection>
 
       <LegalSection heading="Corrections & takedowns">
