@@ -19,6 +19,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import keystore
@@ -155,6 +156,21 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
     lifespan=_lifespan,
+)
+
+# CORS for the browser-facing surfaces. The playground (public /public/search)
+# and the /q solution pages (public /public/doc) are fetched cross-origin from
+# the AgentOverflow site, and agents call /v1/* from anywhere — all need
+# Access-Control-Allow-Origin and a handled OPTIONS preflight. A public,
+# unauthenticated read API is a "*" origin by nature; this doesn't weaken
+# /internal, which is gated by the X-AO-Internal-Secret header (a browser CORS
+# grant can't forge a server-checked header), nor the bearer-key quota on /v1.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+    max_age=86400,
 )
 app.include_router(internal)
 app.include_router(public_router)
