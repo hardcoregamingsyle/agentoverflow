@@ -51,6 +51,10 @@ services:
       AO_INTERNAL_SECRET: ${AO_INTERNAL_SECRET:?set AO_INTERNAL_SECRET in deploy/.env}
       QDRANT_URL: http://qdrant:6333
       PG_DSN: postgresql://ao:${POSTGRES_PASSWORD}@postgres:5432/ao
+      # Optional: IndexNow instant-submission key (also hosted at /<key>.txt on
+      # the site). Unset → ingest-time submission is a no-op. Enables `python -m
+      # app.indexnow` bulk backfill of the existing corpus.
+      AO_INDEXNOW_KEY: ${AO_INDEXNOW_KEY:-}
     mem_limit: 2g
     depends_on:
       qdrant:

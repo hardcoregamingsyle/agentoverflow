@@ -92,6 +92,12 @@ def run_ingest(req: IngestRequest) -> str:
             conn.execute(
                 "INSERT INTO doc_tags (doc_id, tag) VALUES (%s, %s)", (req.doc_id, tag)
             )
+
+    # Push the new/updated page to IndexNow so Bing/Yandex pick it up now instead
+    # of waiting for a sitemap crawl. Best-effort and no-op if unconfigured.
+    from app.indexnow import q_url, submit
+
+    submit([q_url(req.doc_id)])
     return req.doc_id
 
 
