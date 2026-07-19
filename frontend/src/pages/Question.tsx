@@ -21,6 +21,7 @@ interface PublicDoc {
   url: string | null;
   source: string;
   created_at: string | number | null;
+  related?: { doc_id: string; title: string }[];
 }
 
 type LoadState =
@@ -219,6 +220,26 @@ export default function Question() {
             </a>
           ) : null}
         </article>
+
+        {doc.related && doc.related.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+              related problems
+            </h2>
+            <ul className="space-y-1.5">
+              {doc.related.map((r) => (
+                <li key={r.doc_id}>
+                  <Link
+                    to={`/q/${r.doc_id}`}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    {r.title || r.doc_id}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <div className="mt-10 rounded-lg border border-primary/30 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
           <p className="text-xs text-foreground flex-1 leading-relaxed">

@@ -90,6 +90,18 @@ function capped(res, status) {
 
 function prerender(doc, docId) {
   const tags = Array.isArray(doc.tags) ? doc.tags : [];
+  // Real internal links to related /q pages (from the corpus graph edges). This
+  // is the discovery lever: crawlers follow these to reach deep pages instead of
+  // relying on the sitemap alone, and the link graph tells Google which pages
+  // matter. Each id is validated to the same shape used everywhere else.
+  const related = (Array.isArray(doc.related) ? doc.related : [])
+    .filter((r) => r && DOC_ID_RE.test(r.doc_id || ""))
+    .slice(0, 8);
+  const relatedBlock = related.length
+    ? `<h2>Related problems</h2><ul>${related
+        .map((r) => `<li><a href="${SITE}/q/${attr(r.doc_id)}">${esc(r.title || r.doc_id)}</a></li>`)
+        .join("")}</ul>`
+    : "";
   return [
     `<main>`,
     `<h1>${esc(doc.title || "")}</h1>`,
@@ -97,6 +109,7 @@ function prerender(doc, docId) {
     `<h2>Problem</h2><p>${esc(doc.problem || "")}</p>`,
     `<h2>Solution</h2><pre>${esc(doc.solution || "")}</pre>`,
     doc.url ? `<p><a href="${attr(doc.url)}" rel="noreferrer">Original source</a></p>` : "",
+    relatedBlock,
     `<p><a href="${SITE}/playground?q=${encodeURIComponent(clip(oneLine(doc.title || ""), 120))}">Search AgentOverflow for related problems</a></p>`,
     `</main>`,
   ].join("");
