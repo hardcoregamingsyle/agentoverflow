@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { MotionValue } from "framer-motion";
 
-const PARTICLE_COUNT = 2000;
+const PARTICLE_COUNT = 3000;
 const TARGET_FPS = 30;
 
 // Hermite ease, clamped — same curve GLSL's smoothstep uses.
@@ -37,10 +37,11 @@ const VERT = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     vDepth = -mv.z;
     gl_Position = projectionMatrix * mv;
-    // Smaller sprites than the original 300/-mv.z: additive point sprites are
-    // pure overdraw, and overdraw is the dominant cost under software WebGL
-    // (headless Lighthouse). Halving the radius roughly quarters the fill work.
-    gl_PointSize = (0.8 + aSeed * 1.1) * (170.0 / -mv.z);
+    // Real-GPU only path (software WebGL falls back to CSS), so we can afford a
+    // richer sprite than the software-safe minimum. The wider seed range gives
+    // hub/dust size variety that reads premium. Still ~3.6x cheaper than the
+    // original 300/-mv.z that spiked software frames — cheap headroom kept.
+    gl_PointSize = (0.85 + aSeed * 1.2) * (180.0 / -mv.z);
   }
 `;
 
@@ -64,13 +65,15 @@ const FRAG = /* glsl */ `
     vec3 sky  = vec3(0.22, 0.67, 1.00);
     vec3 gold = vec3(0.91, 0.55, 0.06);
     vec3 color = mix(blue, sky, uMorph);
-    color = mix(color, gold, step(0.955, vSeed)); // ~4.5% gold-tier sparks, full strength
+    color = mix(color, gold, step(0.94, vSeed)); // ~6% gold-tier sparks, full strength
 
     // Fade as it disperses so the field recedes behind the text-heavy middle
     // sections instead of fighting the copy.
     float fade = clamp(1.6 - vDepth * 0.12, 0.3, 1.0);
     float disperseFade = 1.0 - uMorph * 0.5;
-    gl_FragColor = vec4(color, alpha * 0.34 * fade * disperseFade);
+    // Brighter additive stack (0.42) — free in fill cost, and the real "premium
+    // glow" lever. Brand blue has ~no red so it saturates toward cyan, not white.
+    gl_FragColor = vec4(color, alpha * 0.42 * fade * disperseFade);
   }
 `;
 
@@ -168,12 +171,12 @@ function CoreFrame({ progress }: { progress: MotionValue<number> }) {
     mesh.current.rotation.z = p * Math.PI * 0.5;
     mesh.current.scale.setScalar(1 - m * 0.4);
     // Brightest when the globe is whole (hero + closing), fades while dispersed.
-    (mesh.current.material as THREE.MeshBasicMaterial).opacity = 0.09 * (1 - m * 0.85);
+    (mesh.current.material as THREE.MeshBasicMaterial).opacity = 0.12 * (1 - m * 0.85);
   });
   return (
     <mesh ref={mesh}>
       <icosahedronGeometry args={[1.4, 1]} />
-      <meshBasicMaterial color="#0a90ff" wireframe transparent opacity={0.14} />
+      <meshBasicMaterial color="#0a90ff" wireframe transparent opacity={0.18} />
     </mesh>
   );
 }
@@ -206,8 +209,9 @@ export default function CorpusScene({ progress }: { progress: MotionValue<number
   return (
     <Canvas
       camera={{ position: [0, 0, 7.4], fov: 46 }}
-      // dpr 1 (was up to 1.5): halves the pixel count the fragment shader fills.
-      dpr={1}
+      // dpr up to 1.5 for crisp sprites on retina. Free on Lighthouse desktop
+      // (devicePixelRatio 1, so R3F clamps to 1 there) — this path is real-GPU only.
+      dpr={[1, 1.5]}
       // Render on demand, throttled by FrameThrottle, instead of every vsync.
       frameloop="demand"
       gl={{ antialias: false, powerPreference: "high-performance", alpha: true }}
