@@ -29,6 +29,15 @@ from typing import Any
 FREE_DAILY_QUOTA = 10_000
 FREE_BURST_PER_MIN = 120
 
+# Platform-wide free+unlimited switch (mirrors AO_FREE_UNLIMITED in the Convex
+# backend's agentoverflow.ts). While true, the VM enforces NO per-key daily/
+# burst quota and NO keyless per-IP throttle — every search is allowed. Counters
+# still increment so usage metrics stay accurate; only the rejection is skipped.
+# This is the authoritative VM-side bypass and is immune to the 2-minute key
+# sync (which overwrites the per-key quota numbers but not this flag). Flip back
+# to False to restore quota enforcement. Requires a VM redeploy to take effect.
+FREE_UNLIMITED = True
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS api_keys (
   key_hash text PRIMARY KEY,
@@ -109,12 +118,12 @@ def charge_quota(key: KeyRecord, key_hash: str) -> QuotaResult:
 
     with get_pool().connection() as conn:
         minute_count = _bump(conn, key_hash, "min", minute)
-        if minute_count > key.burst_per_min:
+        if not FREE_UNLIMITED and minute_count > key.burst_per_min:
             conn.commit()  # persist the attempt; it still counts toward the burst
             return QuotaResult(False, "over_burst", 0, key.daily_quota)
         day_count = _bump(conn, key_hash, "day", day)
         conn.commit()
-        if day_count > key.daily_quota:
+        if not FREE_UNLIMITED and day_count > key.daily_quota:
             return QuotaResult(False, "over_daily", day_count, key.daily_quota)
         return QuotaResult(True, "ok", day_count, key.daily_quota)
 
@@ -134,7 +143,7 @@ def charge_public_ip(ip: str, per_min: int = PUBLIC_IP_PER_MIN) -> bool:
     with get_pool().connection() as conn:
         count = _bump(conn, f"ip:{ip}", "pubmin", minute)
         conn.commit()
-    return count <= per_min
+    return True if FREE_UNLIMITED else count <= per_min
 
 
 def _bump(conn: Any, key_hash: str, win: str, bucket: str) -> int:
