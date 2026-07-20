@@ -14,6 +14,8 @@ const Playground = lazy(() => import("./pages/Playground"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Question = lazy(() => import("./pages/Question"));
 const About = lazy(() => import("./pages/About"));
+const Blog = lazy(() => import("./pages/Blog"));
+const BlogPost = lazy(() => import("./pages/BlogPost"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Attribution = lazy(() => import("./pages/Attribution"));
@@ -81,6 +83,8 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/admin" element={<Admin />} />
               <Route path="/q/:docId" element={<Question />} />
               <Route path="/about" element={<About />} />
+              <Route path="/blog" element={<Blog />} />
+              <Route path="/blog/:slug" element={<BlogPost />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/attribution" element={<Attribution />} />

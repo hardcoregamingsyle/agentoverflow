@@ -98,6 +98,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8 space-y-4 text-[11px] text-muted-foreground">
           <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <Link to="/about" className="hover:text-foreground transition-colors">About</Link>
+            <Link to="/blog" className="hover:text-foreground transition-colors">Blog</Link>
             <Link to="/docs" className="hover:text-foreground transition-colors">API docs</Link>
             <Link to="/attribution" className="hover:text-foreground transition-colors">Licensing &amp; Attribution</Link>
             <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
