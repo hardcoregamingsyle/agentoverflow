@@ -1101,7 +1101,7 @@ function AdminDashboard({
   const load = useCallback(async () => {
     try {
       const [stats, series, learnings, users, corpus, limitRequests] = await Promise.all([
-        convex.query(thalamus.adminStats, { adminToken: token }),
+        convex.action(thalamus.adminStats, { adminToken: token }),
         convex.query(thalamus.adminUsageSeries, { adminToken: token }),
         convex.query(thalamus.adminLearnings, { adminToken: token, limit: 200 }),
         convex.query(thalamus.adminUsers, { adminToken: token }),

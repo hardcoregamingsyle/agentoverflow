@@ -274,7 +274,7 @@ export interface CorpusHealth {
 }
 
 export const adminStats = makeFunctionReference<
-  "query",
+  "action",
   { adminToken: string },
   AdminStats
 >("agentoverflowAdmin:adminStats");
