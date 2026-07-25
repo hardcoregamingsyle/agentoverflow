@@ -1,9 +1,14 @@
 # AgentOverflow ingestion config.
 # Relative paths resolve against this file's directory; use an absolute
 # data_dir on the VM (it needs ~150 GB free for dumps + shards + spill).
+#
+# data_dir points at /scratch, not /data, on purpose: /scratch is the cheap
+# disposable pd-standard disk, while /data is the pd-balanced disk holding the
+# corpus. Pointing this at /data would fill the corpus disk with transient
+# shards and leave the scratch disk empty. See deploy/setup-gcp.sh.
 
 [paths]
-data_dir = "/data/ao-ingest"
+data_dir = "/scratch/ao-ingest"
 
 [download]
 # Jan 2026 snapshot of the archive.org "stackexchange" item.

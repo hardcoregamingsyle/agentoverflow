@@ -41,12 +41,15 @@ Docker's data-root is moved to `/data/docker` *before* any volume exists, so
 instance. The VM also gets `--deletion-protection`, so deleting it is refused
 outright until someone explicitly disarms the flag first.
 
-Spot note: SPOT is ~70% cheaper and fine for the ingestion week, but it is off
-by default because free-trial projects ship `PREEMPTIBLE_CPUS=0` and the create
-just fails. Set `SPOT=1` when the quota is real. If GCP preempts the VM it
-stops (not deleted) — `gcloud compute instances start agentoverflow
---zone=us-central1-a` and carry on. Stages resume at pass granularity: a
-finished pass never repeats, an interrupted one restarts clean.
+Spot note: SPOT is ~70% cheaper and preemption stops the VM rather than
+deleting it. `PREEMPTIBLE_CPUS=0` does *not* block it — Spot draws on standard
+CPU quota, which is worth knowing because the quota page makes it look
+otherwise. It is still off by default: nothing here restarts a preempted
+instance, so it sits stopped until you run `gcloud compute instances start
+agentoverflow --zone=us-central1-a`, and a stalled day during a two-week embed
+costs more than the discount saves. Turn it on with `SPOT=1` once something is
+watching the instance. Stages resume at pass granularity: a finished pass never
+repeats, an interrupted one restarts clean.
 
 ## 3. SSH in
 

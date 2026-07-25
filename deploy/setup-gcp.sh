@@ -31,9 +31,14 @@ BOOT_SIZE="${BOOT_SIZE:-30GB}"
 DATA_SIZE="${DATA_SIZE:-150GB}"
 SCRATCH_SIZE="${SCRATCH_SIZE:-300GB}"
 
-# Spot is ~70% cheaper and preemption only stops the instance, but free-trial
-# projects ship with PREEMPTIBLE_CPUS=0 so the create just fails. Off by
-# default; set SPOT=1 once the quota is actually there.
+# Spot is ~70% cheaper and preemption only stops the instance. PREEMPTIBLE_CPUS
+# being 0 does NOT block it — Spot draws on standard CPU quota, verified by
+# creating one on a project sitting at PREEMPTIBLE_CPUS=0.
+#
+# Off by default anyway, because nothing here auto-restarts a preempted VM: it
+# stays stopped until someone runs `instances start`, and a multi-week embed
+# that stalls for a day costs more than the spot discount saves. Set SPOT=1 if
+# you have something watching the instance and restarting it.
 SPOT="${SPOT:-0}"
 
 if [[ -z "$PROJECT" ]]; then
