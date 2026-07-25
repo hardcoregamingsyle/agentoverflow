@@ -313,16 +313,28 @@ gcloud compute instances update agentoverflow --zone=us-central1-a \
 Estimates at July 2026 GCP list prices, us-central1 (spot prices float;
 treat every number here as an estimate, and set a budget alert regardless):
 
-| Item                                        | Est. cost           |
-| ------------------------------------------- | ------------------- |
-| Ingestion week: e2-standard-4 SPOT (~$0.04/h) | ~$7 one-off        |
-| Serving: e2-standard-2 on-demand (~$0.067/h) | ~$49 / month        |
-| 200 GB pd-balanced ($0.10/GB-mo)             | ~$20 / month        |
-| Static external IPv4 (~$0.005/h)             | ~$4 / month         |
-| Egress (JSON responses only)                 | ~$0-1 / month       |
-| **Steady state**                             | **~$73 / month**    |
-| **Ingest week + 3 months serving**           | **~$7 + $219 ≈ $226** |
+| Item                                            | Est. cost             |
+| ----------------------------------------------- | --------------------- |
+| Ingestion ~2 weeks: e2-standard-4 (~$0.134/h)    | ~$45 one-off          |
+| Serving: e2-standard-2 on-demand (~$0.067/h)     | ~$49 / month          |
+| 150 GB `ao-data` pd-balanced ($0.10/GB-mo)       | ~$15 / month          |
+| 30 GB boot pd-balanced                           | ~$3 / month           |
+| 300 GB `ao-scratch` pd-standard ($0.04/GB-mo)    | ~$12 / month, ingest only |
+| Daily snapshots (incremental, 7-day retention)   | ~$5 / month           |
+| Static external IPv4 (~$0.005/h)                 | ~$4 / month           |
+| Egress (JSON responses only)                     | ~$0-1 / month         |
+| **Steady state** (scratch deleted)               | **~$76 / month**      |
+| **Ingest + 3 months serving**                    | **~$60 + $228 ≈ $288** |
 
-The $300 trial credit covers roughly 4 months. To stretch further: serve on
-spot e2-standard-2 instead (~$20/mo, total ~$44/mo → 6+ months) and accept
-rare preemption blips.
+The $300 trial credit covers the build plus roughly three months of serving.
+Two ways to stretch it, in order of how much they actually save:
+
+- Delete `ao-scratch` once `graph-load` finishes — the dumps and shards are
+  dead weight at that point, and it is $12/mo. Snapshot `ao-data` first if
+  you are feeling careful.
+- Serve on spot `e2-standard-2` (~$20/mo instead of $49) once the corpus is
+  built and preemption blips are only a serving concern, not an ingestion one.
+
+Spot during ingestion is only worth it once `PREEMPTIBLE_CPUS` quota exists —
+on a free trial it is 0, and unlike most quotas a trial account is not allowed
+to request an increase.
