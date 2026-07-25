@@ -124,16 +124,18 @@ def internal_sitemap(page: str) -> JSONResponse:
 
 
 @internal.get("/internal/health")
-def internal_health() -> dict[str, bool | int]:
-    from app.db import postgres_health, qdrant_health
+def internal_health() -> dict[str, bool | int | dict[str, int]]:
+    from app.db import postgres_health, qdrant_health, corpus_source_counts
 
     qdrant_ok, points = qdrant_health()
     postgres_ok = postgres_health()
+    sources = corpus_source_counts() if postgres_ok else {}
     return {
         "ok": qdrant_ok and postgres_ok,
         "qdrant": qdrant_ok,
         "postgres": postgres_ok,
         "points": points,
+        "sources": sources,
     }
 
 

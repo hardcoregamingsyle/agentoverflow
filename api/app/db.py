@@ -75,3 +75,18 @@ def postgres_health() -> bool:
         return True
     except Exception:
         return False
+
+
+def corpus_source_counts() -> dict[str, int]:
+    """Breakdown of corpus documents by source (so, learning)."""
+    try:
+        with get_pool().connection() as conn:
+            rows = conn.execute(
+                "SELECT source, COUNT(*) as cnt FROM documents GROUP BY source"
+            ).fetchall()
+            counts: dict[str, int] = {}
+            for source, cnt in rows:
+                counts[source] = cnt
+            return counts
+    except Exception:
+        return {}
