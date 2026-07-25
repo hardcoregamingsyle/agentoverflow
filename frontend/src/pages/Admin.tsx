@@ -285,6 +285,9 @@ function OverviewTiles({
             <span className={corpus.postgres ? "text-primary" : "text-destructive"}>
               {corpus.postgres ? "up" : "down"}
             </span>
+            {corpus.sources?.learning != null && (
+              <>{" · learning "}{corpus.sources.learning.toLocaleString()}</>
+            )}
           </>
         }
         title={corpus.error ?? "learnings + Stack Overflow docs in the corpus"}
@@ -293,6 +296,11 @@ function OverviewTiles({
         label="learnings"
         value={learnings.total.toLocaleString()}
         sub={`${learnings.pending} pending · ${learnings.scored} scored · ${learnings.rejected} rejected · ${learnings.duplicate} duplicate`}
+        title={
+          learnings.total === 0 && corpus.sources?.learning && corpus.sources.learning > 0
+            ? `Convex shows 0, but VM has ${corpus.sources.learning} learning docs — likely from a prior seeded corpus`
+            : undefined
+        }
       />
       <Tile
         label="tier split"

@@ -270,6 +270,7 @@ export interface CorpusHealth {
   qdrant?: boolean;
   postgres?: boolean;
   points?: number;
+  sources?: Record<string, number>; // { "so": 59123456, "learning": 42 }
   error?: string;
 }
 
