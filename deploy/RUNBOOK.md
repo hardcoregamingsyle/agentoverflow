@@ -24,26 +24,53 @@ cd deploy
 PROJECT=YOUR_PROJECT_ID ZONE=us-central1-a ./setup-gcp.sh
 ```
 
-Creates an `e2-standard-4` SPOT instance (debian-12, 200GB pd-balanced), a
-firewall rule for tcp:8080, and a startup script that installs docker,
-the compose plugin, git, p7zip-full, and aria2. Re-running is harmless.
+Creates an `e2-standard-4` (debian-12, 30GB boot), two data disks, a firewall
+rule for tcp:80/443, a daily snapshot schedule, and a startup script that
+installs docker + the compose plugin + git + p7zip-full + aria2 and mounts the
+disks. Re-running is harmless.
 
-Spot note: SPOT is ~70% cheaper and fine for the ingestion week. If GCP
-preempts the VM it stops (not deleted) — just `gcloud compute instances start
-agentoverflow --zone=us-central1-a` and resume; every pipeline stage is
-resumable.
+The disk layout is the important part:
+
+| Mount      | Disk         | Type        | Survives instance delete | Holds                          |
+| ---------- | ------------ | ----------- | ------------------------ | ------------------------------ |
+| `/data`    | `ao-data`    | pd-balanced | yes — `auto-delete=no`   | docker data-root → the corpus  |
+| `/scratch` | `ao-scratch` | pd-standard | yes — `auto-delete=no`   | dumps + shards, disposable     |
+
+Docker's data-root is moved to `/data/docker` *before* any volume exists, so
+`qdrant_data` and `pg_data` — the corpus — land on the disk that outlives the
+instance. The VM also gets `--deletion-protection`, so deleting it is refused
+outright until someone explicitly disarms the flag first.
+
+Spot note: SPOT is ~70% cheaper and fine for the ingestion week, but it is off
+by default because free-trial projects ship `PREEMPTIBLE_CPUS=0` and the create
+just fails. Set `SPOT=1` when the quota is real. If GCP preempts the VM it
+stops (not deleted) — `gcloud compute instances start agentoverflow
+--zone=us-central1-a` and carry on. Stages resume at pass granularity: a
+finished pass never repeats, an interrupted one restarts clean.
 
 ## 3. SSH in
 
 Give the startup script ~2-3 minutes, then:
 
 ```bash
-gcloud compute ssh agentoverflow --zone=us-central1-a
+# a named user, not root — debian-12 refuses root logins
+gcloud compute ssh aoops@agentoverflow --zone=us-central1-a
 # verify the startup script finished:
 sudo docker --version && git --version && aria2c --version | head -1
 # run docker without sudo:
 sudo usermod -aG docker $USER && newgrp docker
 ```
+
+Check the disks came up before you touch anything else:
+
+```bash
+df -h /data /scratch
+sudo docker info | grep "Docker Root Dir"   # must print /data/docker
+```
+
+If `Docker Root Dir` is anything but `/data/docker`, stop here and fix it. Any
+volume created before that point is sitting on the boot disk, which is exactly
+the mistake this layout exists to prevent.
 
 ## 4. Clone the repo
 
@@ -238,7 +265,50 @@ containers come back via `restart: unless-stopped`).
 After the restart: `docker compose ps` on the VM, then re-run the step-10
 health curl. The static IP from step 8 means Convex needs no changes.
 
-## 13. Budget
+## 13. When the VM dies
+
+The corpus is on `ao-data`, not on the instance. Losing the VM — preemption,
+a bad upgrade, someone deleting it — costs you the box, not the data. Three
+layers, worst case first.
+
+**The instance is gone, disks are fine.** The usual case, because
+`auto-delete=no` detaches the disks instead of destroying them. Confirm, then
+rebuild around them:
+
+```bash
+gcloud compute disks list --zone=us-central1-a          # ao-data should be READY, no users
+PROJECT=YOUR_PROJECT_ID ZONE=us-central1-a ./setup-gcp.sh
+```
+
+`setup-gcp.sh` skips disks that already exist and attaches them to the new
+instance, so this reattaches the corpus as-is. Re-clone the repo, restore
+`deploy/.env`, `docker compose up -d`, done — the qdrant and postgres volumes
+are already populated under `/data/docker`.
+
+**The disk is gone too.** Restore from the daily snapshot — retention is 7
+days and `keep-auto-snapshots` means they survive the disk's deletion:
+
+```bash
+gcloud compute snapshots list --filter="sourceDisk~ao-data" --sort-by=~creationTimestamp
+gcloud compute disks create ao-data --zone=us-central1-a \
+  --source-snapshot=SNAPSHOT_NAME --type=pd-balanced
+```
+
+Then run `setup-gcp.sh` as above. You lose at most a day of ingestion.
+
+**Everything is gone.** Re-ingest from scratch: the pipeline's only real input
+is the public archive.org dump, so nothing is unrecoverable, it just costs the
+compute again. `make all` from step 7, roughly two weeks on an e2-standard-4.
+
+Deletion protection means step one of any *intentional* teardown is disarming
+it first:
+
+```bash
+gcloud compute instances update agentoverflow --zone=us-central1-a \
+  --no-deletion-protection
+```
+
+## 14. Budget
 
 Estimates at July 2026 GCP list prices, us-central1 (spot prices float;
 treat every number here as an estimate, and set a budget alert regardless):
