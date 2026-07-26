@@ -13,8 +13,8 @@ Two tables, both created IF NOT EXISTS on first use:
 * usage_counter — per-key hit counts bucketed by day and by minute, so one key
                   can't burn the free tier in a burst or blow past the daily cap.
 
-Quota numbers arrive per-key from Convex (a tier can lift them); FREE_* are the
-fallback the code uses if a row somehow predates the quota columns.
+Quota numbers arrive per-key from Convex (a tier can lift them) and land in NOT
+NULL columns, so every row carries its own limits.
 """
 
 from __future__ import annotations
@@ -23,11 +23,6 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
-
-# Free tier, per key. 10k/day matches StackOverflow's free API allowance; the
-# burst cap keeps a single key from hammering the corpus VM flat-out.
-FREE_DAILY_QUOTA = 10_000
-FREE_BURST_PER_MIN = 120
 
 # Platform-wide free+unlimited switch (mirrors AO_FREE_UNLIMITED in the Convex
 # backend's agentoverflow.ts). While true, the VM enforces NO per-key daily/

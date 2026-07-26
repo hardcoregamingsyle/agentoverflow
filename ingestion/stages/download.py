@@ -1,4 +1,4 @@
-"""Stage 1 — download the three dump archives from archive.org.
+"""Stage 1 — download the two dump archives from archive.org.
 
 aria2c (16 connections, resumable via its control file) is preferred; wget -c
 is the fallback. A ``<name>.done`` marker next to each archive records
@@ -15,7 +15,7 @@ from ..config import Config
 
 def run(cfg: Config) -> None:
     cfg.dumps_dir.mkdir(parents=True, exist_ok=True)
-    for url in (cfg.posts_url, cfg.postlinks_url, cfg.tags_url):
+    for url in (cfg.posts_url, cfg.postlinks_url):
         name = url.rsplit("/", 1)[1]
         dest = cfg.dumps_dir / name
         marker = cfg.dumps_dir / (name + ".done")

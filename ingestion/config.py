@@ -16,7 +16,6 @@ class Config:
     data_dir: Path
     posts_url: str
     postlinks_url: str
-    tags_url: str
     aria2_connections: int
     min_question_score: int
     min_answer_score: int
@@ -64,7 +63,6 @@ def load_config(path: Path) -> Config:
         data_dir=data_dir,
         posts_url=dl["posts_url"],
         postlinks_url=dl["postlinks_url"],
-        tags_url=dl["tags_url"],
         aria2_connections=int(dl["aria2_connections"]),
         min_question_score=int(fl["min_question_score"]),
         min_answer_score=int(fl["min_answer_score"]),

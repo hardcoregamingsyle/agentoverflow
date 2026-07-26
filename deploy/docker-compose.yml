@@ -55,6 +55,9 @@ services:
       # the site). Unset → ingest-time submission is a no-op. Enables `python -m
       # app.indexnow` bulk backfill of the existing corpus.
       AO_INDEXNOW_KEY: ${AO_INDEXNOW_KEY:-}
+      # Site host the submitted /q URLs and the IndexNow keyLocation are built
+      # from. Only change it when the frontend domain moves.
+      AO_SITE_HOST: ${AO_SITE_HOST:-agentoverflow.aphantic.skinticals.com}
     mem_limit: 2g
     depends_on:
       qdrant:

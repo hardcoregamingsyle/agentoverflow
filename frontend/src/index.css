@@ -98,7 +98,6 @@
 }
 
 .terminal-glow { text-shadow: 0 0 12px oklch(0.62 0.20 250 / 0.4); }
-.terminal-glow-amber { text-shadow: 0 0 8px oklch(0.72 0.16 65 / 0.5); }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -155,10 +154,6 @@
   transform: rotateX(var(--ry, 0deg)) rotateY(var(--rx, 0deg));
   transition: transform 0.18s ease-out;
 }
-
-.layer-back { transform: translateZ(-60px); }
-.layer-mid { transform: translateZ(30px); }
-.layer-front { transform: translateZ(80px); }
 
 @media (prefers-reduced-motion: no-preference) {
   @keyframes float-y {

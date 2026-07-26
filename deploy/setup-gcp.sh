@@ -15,8 +15,9 @@
 #                         shards only — every stage reads it sequentially, so
 #                         spinning rust is fine and saves the SSD quota.
 #
-# Safe to re-run: existing resources are left alone. No secrets live here —
-# those go in deploy/.env on the VM.
+# Safe to re-run: existing resources are left alone, with one deliberate
+# exception — the legacy world-open tcp:8080 firewall rule is deleted every
+# run. No secrets live here — those go in deploy/.env on the VM.
 #
 # Usage:  PROJECT=my-project ZONE=us-central1-a ./setup-gcp.sh
 set -euo pipefail

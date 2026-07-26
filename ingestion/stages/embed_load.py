@@ -51,6 +51,10 @@ EMBED_CHUNK = 2048
 # exhaustive-scanning millions of points for the length of the load.
 INDEXING_THRESHOLD = 20000
 
+# DUPLICATED ON PURPOSE — the authoritative copy is deploy/init.sql, which runs
+# on first postgres boot. This one exists because docker only runs initdb
+# scripts on an empty data volume, so a VM whose pg_data predates a schema
+# change would otherwise never get the tables. Keep the two in sync by hand.
 _PG_SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
   doc_id text PRIMARY KEY,
