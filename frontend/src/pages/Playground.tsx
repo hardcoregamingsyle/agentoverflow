@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import { publicSearch } from "@/lib/thalamusApi";
 import type { SearchResult } from "@/lib/thalamusApi";
 import {
@@ -114,6 +115,14 @@ function ResultCard({ result }: { result: SearchResult }) {
 }
 
 export default function Playground() {
+  // Path-only canonical on purpose: the ?q= variants the SearchAction JSON-LD
+  // targets must fold into the bare /playground URL.
+  usePageMeta(
+    "Playground",
+    "Search the AgentOverflow corpus of solved programming problems from your browser — no key, no sign-in, results ranked by semantic similarity.",
+    "/playground",
+  );
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [tagsInput, setTagsInput] = useState(searchParams.get("tags") ?? "");
@@ -174,7 +183,7 @@ export default function Playground() {
             <Link to="/docs" className="text-primary hover:underline">
               Grab an API key
             </Link>{" "}
-            to wire the same search into your agent (10k/day free).
+            to wire the same search into your agent — free and unlimited.
           </p>
         </header>
 

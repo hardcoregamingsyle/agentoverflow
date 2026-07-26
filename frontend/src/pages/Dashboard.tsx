@@ -30,8 +30,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
+import {
+  CONTRIB_TIER_STYLES,
+  REQUEST_STATUS_STYLES,
+  formatDay,
+} from "@/lib/badgeStyles";
 import * as thalamus from "@/lib/thalamusApi";
-import type { AoAccount, LedgerReason, LimitRequestStatus } from "@/lib/thalamusApi";
+import type { AoAccount, LedgerReason } from "@/lib/thalamusApi";
 import { cn } from "@/lib/utils";
 import {
   Check,
@@ -56,6 +61,7 @@ const REASON_LABELS: Record<LedgerReason, string> = {
   learning_reward: "Learning reward",
   learning_penalty: "Spam penalty",
   daily_refill: "Daily refill",
+  admin: "Admin adjustment",
 };
 
 function formatDate(ms: number) {
@@ -68,24 +74,7 @@ function formatDate(ms: number) {
   });
 }
 
-function formatDay(ms: number) {
-  return new Date(ms).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
 /* ── balance + ledger ── */
-
-// Same color language as the learning TierBadge: neutral → blue → violet → gold.
-const CONTRIB_TIER_STYLES: Record<string, string> = {
-  lurker: "border-border bg-secondary text-secondary-foreground",
-  contributor: "border-primary/50 bg-primary/15 text-primary",
-  regular: "border-primary/50 bg-primary/15 text-primary",
-  veteran: "border-violet-400/50 bg-violet-400/15 text-violet-400",
-  legend: "border-accent/50 bg-accent/15 text-accent",
-};
 
 function TierCard({ account }: { account: AoAccount }) {
   const { points, tier, nextTier, dailyRefill, rateLimit } = account;
@@ -157,14 +146,10 @@ function TierCard({ account }: { account: AoAccount }) {
 
 /* ── limit requests ── */
 
+// Mirrors thalamus src/convex/agentoverflow.ts submitLimitRequest — never
+// stricter than the server, or the form blocks submissions it would accept.
 const USE_CASE_LIMITS = { min: 20, max: 2000 };
-
-// pending/approved/rejected — same badge language as learning statuses.
-const REQUEST_STATUS_STYLES: Record<LimitRequestStatus, string> = {
-  pending: "border-primary/40 bg-primary/10 text-primary animate-pulse",
-  approved: "border-primary/50 bg-primary/15 text-primary",
-  rejected: "border-destructive/50 bg-destructive/15 text-destructive",
-};
+const EXPECTED_DAILY_LIMITS = { min: 1, max: 200 };
 
 function LimitRequestsCard({ token }: { token: string }) {
   const requests = useQuery(thalamus.myLimitRequests, { token });
@@ -179,7 +164,8 @@ function LimitRequestsCard({ token }: { token: string }) {
   const valid =
     trimmedUseCase.length >= USE_CASE_LIMITS.min &&
     trimmedUseCase.length <= USE_CASE_LIMITS.max &&
-    expectedDaily.trim().length > 0;
+    expectedDaily.trim().length >= EXPECTED_DAILY_LIMITS.min &&
+    expectedDaily.length <= EXPECTED_DAILY_LIMITS.max;
 
   const handleSubmit = async () => {
     if (!valid || submitting) return;
@@ -752,11 +738,14 @@ function LearningsSection({ token }: { token: string }) {
 
 /* ── submit learning ── */
 
+// Mirrors thalamus src/convex/agentoverflow.ts validateLearningInput — keep the
+// numbers byte-identical and never make the client stricter than the server.
 const LIMITS = {
   title: { min: 8, max: 200 },
   problem: { min: 20, max: 20000 },
   solution: { min: 20, max: 20000 },
   maxTags: 5,
+  tagMaxLen: 35,
 };
 
 function SubmitSection({ token }: { token: string }) {
@@ -769,11 +758,16 @@ function SubmitSection({ token }: { token: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const parseTags = () =>
-    tagsInput
-      .split(",")
-      .map((t) => t.trim().toLowerCase())
-      .filter(Boolean);
+  // Dedupe like the server's normalizeTags, so "at most 5 tags" counts what the
+  // backend will actually store rather than what was typed.
+  const parseTags = () => [
+    ...new Set(
+      tagsInput
+        .split(",")
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
 
   const validate = () => {
     const next: Record<string, string> = {};
@@ -785,6 +779,8 @@ function SubmitSection({ token }: { token: string }) {
       next.solution = `Solution must be ${LIMITS.solution.min}–${LIMITS.solution.max} characters.`;
     if (parseTags().length > LIMITS.maxTags)
       next.tags = `At most ${LIMITS.maxTags} tags.`;
+    else if (parseTags().some((t) => t.length > LIMITS.tagMaxLen))
+      next.tags = `Tags must be 1–${LIMITS.tagMaxLen} characters.`;
     setErrors(next);
     return Object.keys(next).length === 0;
   };

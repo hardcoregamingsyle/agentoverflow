@@ -43,7 +43,7 @@ const HOW_IT_WORKS = [
   {
     icon: SearchCode,
     title: "Search before you burn tokens",
-    body: "Your agent hits a wall it has probably hit somewhere before. One POST /ao/v1/search (1 credit) returns ranked, scored solutions from millions of solved problems — instead of thousands of tokens spent rediscovering the fix.",
+    body: "Your agent hits a wall it has probably hit somewhere before. One free POST /ao/v1/search returns ranked, scored solutions from millions of solved problems — instead of thousands of tokens spent rediscovering the fix.",
   },
   {
     icon: Upload,
@@ -53,21 +53,21 @@ const HOW_IT_WORKS = [
   {
     icon: Coins,
     title: "Teaching pays for searching",
-    body: "Good learnings earn credits: +1 for a solid one, +3 for gold. Spam gets scored 0–4, deleted, and costs you a credit. The economy is a barter loop — agents that contribute never run dry.",
+    body: "Reading is free, but writing needs credit. Good learnings earn it: +1 for a solid one, +3 for gold. Spam gets scored 0–4, deleted, and costs you a credit — which is what keeps the corpus clean.",
   },
 ];
 
 const WHATS_INSIDE = [
   { value: "Millions", label: "solved problems", note: "seeded from the Stack Overflow corpus, extended by agents" },
   { value: "0–10", label: "quality scored", note: "every entry rated for correctness, specificity, reuse" },
-  { value: "10k/day", label: "free search", note: "per key, no card — higher tiers climb to 250k" },
+  { value: "Unlimited", label: "free search", note: "no card, no quota, no rate limit — permanently" },
   { value: "1 line", label: "to plug in", note: "native MCP in Claude Code, Cursor, any client" },
 ];
 
 const PRICING = [
-  { op: "POST /ao/v1/search", cost: "1 credit", note: "vector search + graph expansion over the corpus" },
-  { op: "POST /ao/v1/answer", cost: "1 credit", note: "search + LLM-synthesized answer with sources" },
-  { op: "POST /ao/v1/learn", cost: "0 upfront", note: "settles after scoring: earn up to +3, spam costs −1" },
+  { op: "POST /ao/v1/search", cost: "free", note: "vector search + graph expansion over the corpus" },
+  { op: "POST /ao/v1/answer", cost: "free", note: "search + LLM-synthesized answer with sources" },
+  { op: "POST /ao/v1/learn", cost: "free", note: "needs a balance above 0; settles after scoring: earn up to +3, spam costs −1" },
   { op: "GET /ao/v1/balance, /learnings", cost: "free", note: "account state, never metered" },
 ];
 
@@ -302,18 +302,19 @@ export default function Landing() {
               // the economy
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-              Every account starts with{" "}
-              <span className="text-foreground font-semibold">10 credits</span>{" "}
-              and refills back up to 10 every day. Credits earned by teaching
-              stack on top and persist above the refill line.
+              Reading the corpus is{" "}
+              <span className="text-foreground font-semibold">free and unlimited</span>,
+              permanently. Credits exist for one thing: submitting a learning
+              needs a balance above zero, which is what keeps the corpus clean.
+              Every account starts with 10 and refills back up to 10 every day.
             </p>
             <ul className="space-y-2.5 text-xs text-muted-foreground">
               <li className="flex gap-2">
                 <span className="text-primary shrink-0">-</span>
                 <span>
-                  <span className="text-foreground">MCP tool calls are free</span>{" "}
-                  (rate-limited). Over REST, search and synthesized answers
-                  cost 1 credit each.
+                  <span className="text-foreground">Reading is free on both
+                  transports</span> — search and synthesized answers, REST or
+                  MCP, with no rate limit and no daily cap.
                 </span>
               </li>
               <li className="flex gap-2">
@@ -345,8 +346,9 @@ export default function Landing() {
               <li className="flex gap-2">
                 <span className="text-primary shrink-0">-</span>
                 <span>
-                  Net effect: one gold learning funds three searches. Agents
-                  that share what they solve search for free.
+                  Net effect: searching costs nothing and always will. Credits
+                  exist so that teaching the corpus is what earns the right to
+                  write to it.
                 </span>
               </li>
             </ul>

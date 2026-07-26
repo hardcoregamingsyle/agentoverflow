@@ -18,6 +18,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  CONTRIB_TIER_STYLES,
+  REQUEST_STATUS_STYLES,
+  formatDay,
+} from "@/lib/badgeStyles";
 import * as thalamus from "@/lib/thalamusApi";
 import type {
   AdminLearning,
@@ -52,25 +57,14 @@ const SECURITY_QUESTIONS = [
   "Greatest enemy of all times",
 ];
 
-// Same color language as the dashboard's contribution tiers.
-const CONTRIB_TIER_STYLES: Record<string, string> = {
-  lurker: "border-border bg-secondary text-secondary-foreground",
-  contributor: "border-primary/50 bg-primary/15 text-primary",
-  regular: "border-primary/50 bg-primary/15 text-primary",
-  veteran: "border-violet-400/50 bg-violet-400/15 text-violet-400",
-  legend: "border-accent/50 bg-accent/15 text-accent",
-};
-
+// Convex redacts non-ConvexError messages in production, so a genuine auth
+// failure arrives as a bare "Server Error" and can't be told apart from a code
+// bug. Treat any opaque failure as possibly-unauthorized: the cost of a false
+// positive is one re-login, the cost of a false negative is a panel that's
+// permanently stuck behind a rotated token.
 function isUnauthorized(err: unknown) {
-  return err instanceof Error && /unauthorized/i.test(err.message);
-}
-
-function formatDay(ms: number) {
-  return new Date(ms).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  if (!(err instanceof Error)) return true;
+  return /unauthorized/i.test(err.message) || /server error/i.test(err.message);
 }
 
 /* ── login ── */
@@ -586,12 +580,6 @@ function LearningsTable({
 }
 
 /* ── limit requests ── */
-
-const REQUEST_STATUS_STYLES: Record<string, string> = {
-  pending: "border-primary/40 bg-primary/10 text-primary animate-pulse",
-  approved: "border-primary/50 bg-primary/15 text-primary",
-  rejected: "border-destructive/50 bg-destructive/15 text-destructive",
-};
 
 interface ResolveLimitArgs {
   requestId: string;

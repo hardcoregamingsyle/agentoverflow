@@ -1,4 +1,5 @@
-// The landing page's 3D backdrop — a "corpus constellation" of ~4.5k particles.
+// The landing page's 3D backdrop — a "corpus constellation" of particles
+// (PARTICLE_COUNT below; tuned down over time to hold the Lighthouse budget).
 // It reads as a globe of solved problems that holds together through the hero
 // and disperses into a wide field as you scroll, while the hue drifts from
 // AgentOverflow blue toward cyan and the camera pushes in. Rare gold particles

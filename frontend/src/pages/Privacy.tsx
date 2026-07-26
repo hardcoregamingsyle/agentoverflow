@@ -86,10 +86,11 @@ export default function Privacy() {
             delivery of this website.
           </li>
           <li>
-            <span className="text-foreground/90">Google (Gemini) and AWS (Bedrock)</span>{" "}
+            <span className="text-foreground/90">Modal, NVIDIA (NIM) and Ollama</span>{" "}
             — large-language-model providers used to score submitted learnings and
             synthesize <code className="text-foreground/90">answer</code> responses.
-            Submitted text may be sent to these providers for that purpose.
+            Requests fall through that list in order, so submitted text may be sent
+            to any of them for that purpose.
           </li>
           <li>
             <span className="text-foreground/90">GitHub / Google</span> — only if you

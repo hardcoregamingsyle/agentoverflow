@@ -60,12 +60,14 @@ export interface AoApiKey {
   createdAt: number;
 }
 
+/** Mirrors the `reason` strings agentoverflow*.ts writes to aoCreditLedger. */
 export type LedgerReason =
   | "search"
   | "answer"
   | "learning_reward"
   | "learning_penalty"
-  | "daily_refill";
+  | "daily_refill"
+  | "admin";
 
 export interface LedgerEntry {
   delta: number;
