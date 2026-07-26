@@ -1,6 +1,6 @@
 # Frontend — the Site
 
-The human-facing site (`frontend/`): landing, API docs, auth, dashboard, playground, and the admin panel. A static Vite + React SPA that talks straight to the shared Thalamus Convex deployment — no backend of its own, no Convex codegen.
+The human-facing site (`frontend/`): landing, API docs, auth, dashboard, playground, blog, the legal pages, and the admin panel. A static Vite + React SPA that talks straight to the shared Thalamus Convex deployment — no backend of its own, no Convex codegen.
 
 ## Stack
 
@@ -21,10 +21,25 @@ Declared in `src/main.tsx`; every page is lazy-loaded behind an error boundary t
 | `/docs` | Docs | user-facing `/ao/v1/*` reference (repo-facing version: [api.md](./api.md)) |
 | `/auth` | Auth | email OTP + Google/GitHub OAuth |
 | `/dashboard` | Dashboard | `ao_` keys, credits/ledger, tier progress, tier-increase applications, learnings |
-| `/playground` | Playground | corpus search from the browser — same 1 credit as the API |
+| `/playground` | Playground | keyless corpus search from the browser — no key, no session, no charge (see below) |
 | `/admin` | Admin | operator panel — see [admin.md](./admin.md) |
-| `/q/:docId` | Question | public page for one corpus document, fetched from the no-auth `GET /ao/public/doc?id=` endpoint; the target of every sitemap URL (see [architecture.md](./architecture.md#public-seo-surface)) |
+| `/q/:docId` | Question | public page for one corpus document, fetched straight from the corpus VM (`GET {AO_SEARCH_BASE}/public/doc/<id>`, no auth); the target of every sitemap URL (see [architecture.md](./architecture.md#public-seo-surface)) |
+| `/about` | About | what the corpus is and how search works |
+| `/blog` | Blog | post index; the posts themselves are declared in `src/content/blog.ts` |
+| `/blog/:slug` | BlogPost | one post, resolved from that same module |
+| `/privacy`, `/terms`, `/attribution`, `/contact`, `/dmca` | Privacy, Terms, Attribution, Contact, Dmca | the legal cluster — static copy, one component each, with no data of their own beyond the shared `Layout` header. Not product surfaces; `/attribution` is where the corpus's CC BY-SA terms live. |
 | `*` | NotFound | 404 |
+
+`/about`, `/blog`, `/blog/:slug` and the five legal pages exist for crawlers and humans reading before they sign up, which is why they carry sitemap entries ([seo.md](./seo.md)) while `/dashboard`, `/admin` and `/auth` are disallowed in `robots.txt`.
+
+## Public Playground
+
+`/playground` is the one search surface with no key at all. `publicSearch` in `src/lib/thalamusApi.ts` POSTs to `${AO_SEARCH_BASE}/public/search` with **no `Authorization` header**, and the VM's `public_search_seo` route (`api/app/public_api.py`) takes no auth dependency — there is no session, no `ao_` key and no credit involved:
+
+- Results are clamped to `PUBLIC_SEARCH_TOP_K = 5` server-side regardless of the `top_k` the client asks for.
+- The route resolves a client IP from the first hop of `X-Forwarded-For` (falling back to the socket peer) and counts it, but the throttle it feeds is **not enforced** while the platform is free and unlimited — `charge_public_ip` counts and returns allowed. The counters keep running so usage metrics stay honest. See [economy.md](./economy.md#free-and-unlimited--read-this-first).
+- The 429 path is therefore dormant, not gone. If it ever fires, `publicSearch` throws and `Playground.tsx` surfaces it as a `sonner` toast.
+- The query is mirrored into the URL (`?q=`, plus `?tags=`) so results are shareable — that's the target of the site's `SearchAction` JSON-LD.
 
 ## Auth Against the Shared Deployment
 
@@ -60,7 +75,7 @@ There is no `_generated/api` here — the contract is pinned by string name. Con
 cd frontend
 bun install
 cp .env.example .env.local    # VITE_CONVEX_URL=https://<deployment>.convex.cloud
-bun run dev                   # http://localhost:5174
+bun run dev                   # http://localhost:5173 (vite.config.ts sets no port — Vite's default)
 bun run build                 # tsc -b + vite build → dist/
 bun run type-check            # TypeScript only
 bun run lint                  # ESLint

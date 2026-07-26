@@ -45,13 +45,17 @@ make test          # unit tests, stdlib only
 
 ### 1. download — 1-2 h
 
-Fetches `stackoverflow.com-Posts.7z`, `stackoverflow.com-PostLinks.7z` and
-`stackoverflow.com-Tags.7z` from the archive.org `stackexchange` item.
-aria2c with 16 connections if present, `wget -c` otherwise.
+Fetches `stackoverflow.com-Posts.7z` and `stackoverflow.com-PostLinks.7z` from
+the archive.org `stackexchange` item. aria2c with 16 connections if present,
+`wget -c` otherwise.
+
+Two archives, not three. There's no Tags.7z download because nothing would read
+it — question tags ride along in the `Tags` attribute of every row in Posts.xml
+(`xmlrows.parse_tags` handles both the old `<a><b>` and the current `|a|b|`
+format), so pulling a second copy would just be gigabytes of duplicate.
 
 Resume: partial files continue (`-c`); a `<name>.done` marker skips finished
-ones. Tags.7z is fetched per spec but not consumed downstream — question tags
-come from the `Tags` attribute in Posts.xml.
+ones.
 
 ### 2. filter — 4-8 h
 
@@ -107,9 +111,16 @@ fastembed `BAAI/bge-small-en-v1.5` in batches of 256. Creates `ao_corpus` on
 first run (on-disk vectors, int8 scalar quantization) and the Postgres schema
 with `IF NOT EXISTS`. Applies rescore overrides when present, recomputing the
 tier. Full problem/solution text goes to `documents`, tags to `doc_tags`.
-HNSW indexing is switched off (`indexing_threshold=0`) while the stage loads —
-at collection creation and on every restart — and restored to 20000 at the
-end, so Qdrant indexes once instead of during every upsert.
+
+HNSW indexing stays on the whole way through — `INDEXING_THRESHOLD = 20000`
+at collection creation, re-asserted on every start in case an older run left it
+at 0. Zeroing the threshold is the classic bulk-load trick and it's the wrong
+call here: the collection is answering live searches while it fills, and an
+unindexed collection means an exhaustive scan — fine at 30k points, seconds per
+query at 3.7M. On CPU the load tops out around 15 docs/s anyway, way under what
+the optimizer can keep up with, so the index is basically free. Set
+`AO_EMBED_CUDA=1` (with `fastembed-gpu` installed) to run the same ONNX model on
+a GPU instead — same vectors, far faster bulk load.
 
 Resume: `state/embed_load.json` tracks finished shards; inside a shard both
 Qdrant upserts and `ON CONFLICT DO NOTHING` inserts are idempotent, so an
@@ -127,7 +138,7 @@ no-ops completed runs. Delete the marker to replay.
 ## Layout under data_dir
 
 ```
-dumps/    the three .7z archives + .done markers
+dumps/    the two .7z archives + .done markers
 shards/   filtered-*.jsonl.gz, scored-*.jsonl.gz
 state/    filter.sqlite, *.json state files, score_calibration.json,
           rescore_overrides.jsonl

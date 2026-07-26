@@ -25,7 +25,7 @@ Long stages should run inside tmux (see `deploy/RUNBOOK.md` step 7). Qdrant and 
 
 | # | Stage | Consumes | Produces | Duration |
 |---|-------|----------|----------|----------|
-| 1 | `download` | archive.org `stackexchange` item | `dumps/*.7z` + `.done` markers | ~1–2 h |
+| 1 | `download` | archive.org `stackexchange` item (Posts + PostLinks) | `dumps/*.7z` + `.done` markers | ~1–2 h |
 | 2 | `filter` | `Posts.7z` (streamed, never extracted) | `shards/filtered-*.jsonl.gz` (+ `state/filter.sqlite` spill) | ~4–8 h |
 | 3 | `score` | filtered shards | `shards/scored-*.jsonl.gz` (score + tier added; < 5 dropped) | ~1–2 h |
 | 4 | `rescore-llm` (optional) | scored shards, heuristic ≥ 8 only | `state/rescore_overrides.jsonl` | hours–days, ~$20–60 |
@@ -34,11 +34,11 @@ Long stages should run inside tmux (see `deploy/RUNBOOK.md` step 7). Qdrant and 
 
 Stage notes:
 
-- **download** — Posts, PostLinks, and Tags archives; aria2c with 16 connections when present, `wget -c` otherwise. Tags.7z is fetched per spec but not consumed — question tags come from the `Tags` attribute in Posts.xml.
+- **download** — two archives, Posts and PostLinks; aria2c with 16 connections when present, `wget -c` otherwise. There is no Tags archive: question tags come from the `Tags` attribute inside Posts.xml (`ingestion/xmlrows.py` `parse_tags`, which handles both the `<a><b>` and `|a|b|` dump formats).
 - **filter** — streams `7z e -so` through an incremental XML parser, twice. Pass 1 keeps questions with Score ≥ 2; pass 2 keeps the best answer per question (accepted wins outright, otherwise top answer with Score ≥ 2). Questions without a qualifying answer drop out. HTML becomes plain text with `<pre>`/`<code>` preserved as fenced blocks.
 - **score** — deterministic heuristic (`ingestion/scoring.py`): `raw = 0.45*pct(log1p(qscore)) + 0.35*pct(log1p(ascore)) + 0.10*accepted + 0.10*pct(log1p(views))`, percentiles from a seeded 200k reservoir sample, cutpoints calibrated to ~5% tens and ~15% 8–9s. Score < 5 is dropped entirely.
 - **rescore-llm** — second opinion on everything the heuristic put at 8+; see below.
-- **embed-load** — fastembed `BAAI/bge-small-en-v1.5` in batches of 256; creates `ao_corpus` (on-disk vectors, int8 quantization) and the Postgres schema with `IF NOT EXISTS`; applies rescore overrides when present, recomputing the tier. HNSW indexing is disabled for the duration of the load (`indexing_threshold=0`, set at collection creation and re-applied on every restart) and restored to 20000 when the stage completes, so Qdrant builds the index once instead of on every upsert.
+- **embed-load** — fastembed `BAAI/bge-small-en-v1.5` in batches of 256; creates `ao_corpus` (on-disk vectors, int8 quantization) and the Postgres schema with `IF NOT EXISTS`; applies rescore overrides when present, recomputing the tier. HNSW indexing stays enabled for the whole load: `INDEXING_THRESHOLD = 20000` is set at collection creation and re-asserted on every start (in case an older run left it at 0), so the collection serves live searches while it fills instead of exhaustive-scanning millions of points. On the CPU path the load is embedding-bound — around 15 docs/s, far under what the optimizer can index — so indexing costs the load almost nothing. `AO_EMBED_CUDA=1` (with `fastembed-gpu`) runs the same ONNX model on a GPU for a much faster bulk load.
 - **graph-load** — inserts `doc_links` edges for LinkTypeId 1 (linked) and 3 (duplicate), only where both endpoints exist in `documents`.
 
 ## Resume Semantics
@@ -61,7 +61,7 @@ Relative paths resolve against the file's directory; use an absolute `data_dir` 
 | Section | Key | Meaning (default) |
 |---------|-----|-------------------|
 | `[paths]` | `data_dir` | working directory for dumps/shards/state (`/data/ao-ingest`) |
-| `[download]` | `posts_url`, `postlinks_url`, `tags_url` | archive.org dump URLs (Jan 2026 snapshot) |
+| `[download]` | `posts_url`, `postlinks_url` | archive.org dump URLs (Jan 2026 snapshot) — the only two archives the pipeline fetches |
 | | `aria2_connections` | parallel connections (16) |
 | `[filter]` | `min_question_score` | keep questions with Score ≥ N (2) |
 | | `min_answer_score` | non-accepted answers need Score ≥ N; accepted always qualifies (2) |
@@ -69,7 +69,7 @@ Relative paths resolve against the file's directory; use an absolute `data_dir` 
 | `[score]` | `sample_size`, `sample_seed` | reservoir sample for percentile calibration (200000, 1337 — deterministic) |
 | | `target_gold_frac`, `target_high_frac` | calibration targets: ~5% tens, ~15% 8–9s |
 | | `min_keep_score` | below this is dropped entirely (5) |
-| `[rescore]` | `model` | Gemini model for the re-score pass (`gemini-flash-lite`) |
+| `[rescore]` | `model` | Gemini model for the re-score pass (`gemini-3.1-flash-lite`). Must be a real versioned id — it goes straight into the v1beta REST path, and a 404 isn't retryable, so a wrong id kills the stage on the first record. |
 | | `min_score` | only heuristic ≥ N goes to the LLM (8) |
 | | `max_chars` | problem+solution budget per prompt (8000) |
 | `[qdrant]` | `url`, `collection` | `http://localhost:6333`, `ao_corpus` |
@@ -82,7 +82,7 @@ Relative paths resolve against the file's directory; use an absolute `data_dir` 
 ## Layout Under data_dir
 
 ```
-dumps/    the three .7z archives + .done markers
+dumps/    the two .7z archives + .done markers
 shards/   filtered-*.jsonl.gz, scored-*.jsonl.gz
 state/    filter.sqlite, *.json state files, score_calibration.json,
           rescore_overrides.jsonl

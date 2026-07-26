@@ -24,10 +24,13 @@ cd deploy
 PROJECT=YOUR_PROJECT_ID ZONE=us-central1-a ./setup-gcp.sh
 ```
 
-Creates an `e2-standard-4` (debian-12, 30GB boot), two data disks, a firewall
-rule for tcp:80/443, a daily snapshot schedule, and a startup script that
-installs docker + the compose plugin + git + p7zip-full + aria2 and mounts the
-disks. Re-running is harmless.
+Creates an `e2-standard-4` (debian-12, 30GB boot), two data disks, the
+`ao-allow-web` firewall rule (tcp:80,443 → tag `ao-api`), a daily snapshot
+schedule, and a startup script that installs docker + the compose plugin + git
++ p7zip-full + aria2 and mounts the disks. Re-running is harmless, with one
+deliberate exception: every run deletes the legacy world-open `ao-allow-8080`
+rule. The api container binds `127.0.0.1:8080`, so the only way in from off-box
+is Caddy on 443.
 
 The disk layout is the important part:
 
@@ -86,32 +89,46 @@ cd agentoverflow
 
 ```bash
 cp deploy/.env.example deploy/.env
-# fill in both values; generate each with:
+# generate the two secrets with:
 openssl rand -hex 32
 nano deploy/.env
 ```
 
-`AO_INTERNAL_SECRET` is the shared secret between Convex and this VM — you
-will paste the same value into the Convex dashboard in step 9.
+Four values are hard-required. docker-compose interpolates them with `:?`, so a
+missing one fails `docker compose up` outright instead of booting half a stack:
+
+| Variable             | Value                                        |
+| -------------------- | -------------------------------------------- |
+| `AO_INTERNAL_SECRET` | `openssl rand -hex 32` — the shared secret between Convex and this VM; same value goes into the Convex dashboard in step 9 |
+| `POSTGRES_PASSWORD`  | `openssl rand -hex 32` — password for the `ao` user/db; loopback-only, but don't reuse the secret above |
+| `AO_API_HOST`        | the public API hostname, e.g. `api.<your-domain>` — Caddy requests the certificate for it in step 11 |
+| `AO_CONVEX_HOST`     | the deployment's `.convex.site` host, where Caddy proxies the credit/LLM/MCP routes           |
+
+Two more are optional and can stay blank: `AO_INDEXNOW_KEY` (unset means the
+ingest-time IndexNow ping is a no-op) and `AO_SITE_HOST` (defaults to the live
+frontend domain — only set it if the site moved).
 
 ## 6. Start the stack
 
 ```bash
 cd deploy
 docker compose up -d --build
-docker compose ps          # wait until all three services are "healthy"
+docker compose ps          # qdrant, postgres and api must read "healthy"
 ```
 
 First build takes a few minutes (it pre-downloads the embedding model).
 Postgres creates the `documents` / `doc_tags` / `doc_links` tables from
-`init.sql` on first boot.
+`init.sql` on first boot. The fourth service, `caddy`, carries no healthcheck,
+so it never reads more than "running" — and until DNS points at the box (step
+11) it sits retrying its certificate. That is expected this early; step 11 is
+where you confirm the edge actually serves.
 
 Quick local health check:
 
 ```bash
 source .env
 curl -s -H "X-AO-Internal-Secret: $AO_INTERNAL_SECRET" http://localhost:8080/internal/health
-# {"ok":true,"qdrant":true,"postgres":true,"points":0}
+# {"ok":true,"qdrant":true,"postgres":true,"points":0,"sources":{}}
 ```
 
 ## 7. Run the ingestion pipeline
@@ -135,8 +152,12 @@ python -m ingestion filter        # ~4-8 h   (stream-parse Posts.xml)
 python -m ingestion score         # fast     (heuristic 0-10, drops <5)
 python -m ingestion rescore-llm   # optional (Gemini re-score, ~$20-60; skippable)
 python -m ingestion embed-load    # ~12-24 h (embeddings -> Qdrant, text -> Postgres)
-python -m ingestion graph-load    # fast     (PostLinks -> doc_links, doc_tags)
+python -m ingestion graph-load    # fast     (PostLinks -> doc_links)
 ```
+
+`embed-load` is what fills `doc_tags`; `graph-load` writes `doc_links` and
+nothing else. `rescore-llm` needs `GEMINI_API_KEY` in the environment and calls
+the model pinned in `ingestion/config.toml` — currently `gemini-3.1-flash-lite`.
 
 Every stage is resumable; if the spot VM gets preempted, start it again and
 re-run the interrupted stage. Detach tmux with `Ctrl-b d`, reattach with
@@ -160,43 +181,51 @@ In the thalamus Convex dashboard → Settings → Environment Variables, set:
 
 | Variable             | Value                                        |
 | -------------------- | -------------------------------------------- |
-| `AO_VM_URL`          | `https://api.<your-domain>` once the TLS edge in step 11 is up (interim: `http://<VM_IP>:8080`) |
+| `AO_VM_URL`          | `https://api.<your-domain>` — the Caddy hostname from step 11 |
 | `AO_INTERNAL_SECRET` | same value as in `deploy/.env`               |
 | `AO_FRONTEND_URL`    | the AgentOverflow Pages URL (e.g. `https://agentoverflow.pages.dev`) |
 
+There is no IP fallback for `AO_VM_URL`: 8080 binds loopback and the firewall
+never opens it. Set this once step 11's certificate is issued — until then
+Convex has nothing to reach and search/answer degrade to 503.
+
 ## 10. Smoke tests
 
-From your laptop (`VM_IP` from step 8, `SECRET` from `deploy/.env`):
+`/internal/*` is loopback-only, so these run **on the box**, not from your
+laptop. SSH in and read the secret straight out of `deploy/.env`:
 
 ```bash
-VM_IP=1.2.3.4
-SECRET=your-ao-internal-secret
+gcloud compute ssh aoops@agentoverflow --zone=us-central1-a
+cd ~/agentoverflow/deploy && source .env
+SECRET="$AO_INTERNAL_SECRET"
 
 # health — expect ok:true and a 7-figure points count after ingestion
-curl -s -H "X-AO-Internal-Secret: $SECRET" http://$VM_IP:8080/internal/health
+curl -s -H "X-AO-Internal-Secret: $SECRET" http://localhost:8080/internal/health
 
 # search
-curl -s -X POST http://$VM_IP:8080/internal/search \
+curl -s -X POST http://localhost:8080/internal/search \
   -H "X-AO-Internal-Secret: $SECRET" -H "Content-Type: application/json" \
   -d '{"query": "flatten a nested list in python", "top_k": 3}'
 
 # ingest — expect 200 {"vm_doc_id":"learning-smoke1"}
-curl -s -X POST http://$VM_IP:8080/internal/ingest \
+curl -s -X POST http://localhost:8080/internal/ingest \
   -H "X-AO-Internal-Secret: $SECRET" -H "Content-Type: application/json" \
   -d '{"doc_id":"learning-smoke1","title":"Smoke test doc","problem":"A uniquely phrased smoke-test problem about frobnicating widgets.","solution":"Enable the frob flag.","tags":["smoke"],"score":5,"tier":"low","source":"learning","url":null}'
 
 # dedup — same content, DIFFERENT doc_id: expect HTTP 409 {"error":"duplicate","duplicate_of":"learning-smoke1"}
-curl -s -w "\n%{http_code}\n" -X POST http://$VM_IP:8080/internal/ingest \
+curl -s -w "\n%{http_code}\n" -X POST http://localhost:8080/internal/ingest \
   -H "X-AO-Internal-Secret: $SECRET" -H "Content-Type: application/json" \
   -d '{"doc_id":"learning-smoke2","title":"Smoke test doc","problem":"A uniquely phrased smoke-test problem about frobnicating widgets.","solution":"Enable the frob flag.","tags":["smoke"],"score":5,"tier":"low","source":"learning","url":null}'
 
 # cleanup — expect {"ok":true}
-curl -s -X DELETE http://$VM_IP:8080/internal/item/learning-smoke1 \
+curl -s -X DELETE http://localhost:8080/internal/item/learning-smoke1 \
   -H "X-AO-Internal-Secret: $SECRET"
 ```
 
 Also confirm no secret = no service:
-`curl -s -o /dev/null -w "%{http_code}\n" http://$VM_IP:8080/internal/health` → `401`.
+`curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/internal/health` → `401`.
+
+The public, agent-facing half is smoke-tested in step 11, once TLS is up.
 
 ## 11. Public API & TLS edge (Caddy)
 
@@ -212,14 +241,16 @@ Convex. Caddy terminates TLS in front of the api container, which now binds
    | ---- | ------------------- | --------- | --- |
    | A    | `api.<your-domain>` | `<VM_IP>` | 300 |
 
-2. Put that hostname in `deploy/.env` so Caddy knows what cert to request:
+2. Confirm `AO_API_HOST` in `deploy/.env` (set back in step 5) is exactly the
+   name you just pointed at the IP — Caddy asks Let's Encrypt for that name and
+   nothing else:
 
    ```bash
-   echo "AO_API_HOST=api.<your-domain>" >> deploy/.env
+   grep AO_API_HOST deploy/.env
    ```
 
-3. Open 80/443 and drop the legacy world-open 8080 rule (re-running
-   `setup-gcp.sh` does both), then bring the edge up:
+3. The firewall needs nothing here — `setup-gcp.sh` opened 80/443 and deleted
+   the legacy 8080 rule back in step 2. Bring the edge up:
 
    ```bash
    cd deploy && docker compose up -d
@@ -240,8 +271,12 @@ Convex. Caddy terminates TLS in front of the api container, which now binds
    ```
 
 Keys sync Convex → VM every 2 minutes (`sync agentoverflow keys to vm` cron),
-so a new key works within ~2 min and a revoked one dies just as fast. Free tier
-is 10k searches/day per key; higher contribution tiers lift it (CONTRIB_TIERS).
+so a new key works within ~2 min and a revoked one dies just as fast. Reading
+the corpus is free and unlimited — no per-key daily cap, no burst limit, no
+credit charge. Two flags hold that open (`FREE_UNLIMITED` in
+`api/app/keystore.py`, `AO_FREE_UNLIMITED` in the Convex backend); the quota
+columns still sync and the counters still increment, they just never reject.
+See `../docs/economy.md`, "Free and Unlimited".
 
 ## 12. Downsize after ingestion
 
@@ -266,7 +301,8 @@ cheaper; the tradeoff is occasional preemption (auto-restarts on `start`,
 containers come back via `restart: unless-stopped`).
 
 After the restart: `docker compose ps` on the VM, then re-run the step-10
-health curl. The static IP from step 8 means Convex needs no changes.
+health curl from that same shell. The static IP from step 8 means Convex needs
+no changes.
 
 ## 13. When the VM dies
 

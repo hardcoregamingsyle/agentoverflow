@@ -54,7 +54,7 @@ Five moving parts:
 
 ```bash
 # Frontend
-cd frontend && bun install && bun run dev    # Vite default port 5173 (README's 5174 is stale)
+cd frontend && bun install && bun run dev    # Vite default port 5173 (no server block in vite.config.ts)
 cd frontend && bun run build                 # tsc -b && vite build → frontend/dist
 cd frontend && bun run type-check            # tsc -b --noEmit
 cd frontend && bun run lint                  # eslint .
@@ -76,11 +76,12 @@ python -m unittest discover -s api/tests -v
 
 * The Makefile `cd`s to the repo root internally, so `python -m ingestion <stage>` from the root is equivalent.
 * `rescore-llm` needs `GEMINI_API_KEY` in the environment; skip it with `python -m ingestion rescore-llm --skip`.
+* **CI (`.github/workflows/ci.yml`)** runs two jobs on every push to `main`: frontend type-check + lint + build (inside `frontend/`, since the root `package.json` only has `build`), and both Python suites. It installs only `fastapi`/`pydantic`/`httpx` — the lazy-import convention below is what keeps the heavy deps out. There is no lockfile-sync gate: this repo has no `package-lock.json` (Cloudflare Pages builds it with bun), so don't copy thalamus's `npm ci --dry-run` step here. The cross-repo `makeFunctionReference` check can't run from this repo either — it needs the Convex backend, so it belongs in thalamus CI with this repo checked out beside it.
 
 ### Environment Variables
 
 * **Frontend build (both optional, prod fallbacks baked in):** `VITE_CONVEX_URL`, `VITE_AO_SEARCH_BASE`.
-* **VM (`deploy/.env`) — all four are hard-required by docker-compose `:?` interpolation:** `AO_INTERNAL_SECRET`, `POSTGRES_PASSWORD`, `AO_API_HOST`, `AO_CONVEX_HOST`. Note: `.env.example` only lists the first two — add the other two or `docker compose up` fails.
+* **VM (`deploy/.env`) — four hard-required by docker-compose `:?` interpolation:** `AO_INTERNAL_SECRET`, `POSTGRES_PASSWORD`, `AO_API_HOST`, `AO_CONVEX_HOST`. Two optional: `AO_INDEXNOW_KEY` (blank → IndexNow submission is a no-op) and `AO_SITE_HOST` (defaults to the live frontend domain). `.env.example` lists all six.
 * **Convex side (thalamus dashboard, not this repo):** `AO_VM_URL`, `AO_INTERNAL_SECRET` (identical value to the VM's), `AO_FRONTEND_URL` (OAuth redirect allowlist).
 * The FastAPI app refuses to start without `AO_INTERNAL_SECRET`.
 
@@ -92,7 +93,7 @@ python -m unittest discover -s api/tests -v
 
 * The SPA calls the shared Thalamus Convex deployment (`befitting-wildebeest-866`) for auth/keys/credits/admin — via **string-pinned `makeFunctionReference` calls in `frontend/src/lib/thalamusApi.ts`**, the single file where the whole cross-repo contract lives. There is no codegen: renaming a Convex function in thalamus breaks this site **silently at runtime**, not at build time.
 * Auth = Thalamus custom session tokens (email OTP + Google/GitHub OAuth through the Convex HTTP router), stored in localStorage `agentoverflow_session_token`. Admin uses a separate token (`ao_admin_token`) from `admin:adminLogin`. Not @convex-dev/auth.
-* **Caddy on the VM is the single public entry** (`api.agentoverflow.aphantic.skinticals.com`, TLS): `/v1/answer`, `/v1/learn`, `/v1/learnings`, `/v1/balance`, `/mcp` are rewritten to `/ao/*` and reverse-proxied to Convex (slug hidden); everything else — the **free** `/v1/search`, `/v1/doc`, `/public/*`, `/internal/*` — is served by the local FastAPI container. Consequence: on the public host, search is free (quota-only); the 1-credit search exists only on the Convex `/ao/v1/search` surface, which Caddy does not route to.
+* **Caddy on the VM is the single public entry** (`api.agentoverflow.aphantic.skinticals.com`, TLS): `/v1/answer`, `/v1/learn`, `/v1/learnings`, `/v1/balance`, `/mcp` are rewritten to `/ao/*` and reverse-proxied to Convex (slug hidden); everything else — `/v1/search`, `/v1/doc`, `/v1/health`, `/public/*`, `/internal/*` — is served by the local FastAPI container. Consequence: search on the public host never touches the credit backend at all; the 1-credit search only ever existed on the Convex `/ao/v1/search` surface, which Caddy does not route to — and that price is itself dormant (see §6).
 * `ao_` keys are validated **locally on the VM**: a thalamus cron pushes sha256-hash snapshots to `POST /internal/sync-keys` every ~2 min (full replace — revocation lands as an omission, so a revoked key stays live until the next sync). The search hot path never round-trips to Convex.
 * `/internal/*` is authed by the `X-AO-Internal-Secret` header (constant-time compare). Everything binds 127.0.0.1 except Caddy — any doc telling you to curl `<VM_IP>:8080` from a laptop is stale; internal health checks run on-box: `curl -H "X-AO-Internal-Secret: $S" http://localhost:8080/internal/health`.
 
@@ -105,7 +106,7 @@ python -m unittest discover -s api/tests -v
 
 ### SEO (deliberate, layered — don't casually simplify)
 
-Per-route `usePageMeta` in the SPA; `functions/q/[docId].js` edge-rewrites the shell's singleton head tags and injects crawler-visible content + QAPage JSON-LD (so `frontend/index.html` must keep exactly one title/description/canonical/OG set); sitemap Pages Functions proxy the Convex-built corpus sitemaps onto this domain; `robots.txt` disallows app routes.
+Per-route `usePageMeta` on every indexable route except `/` (which keeps the shell's own homepage tags) and `/q/:docId` (which sets its own in `Question.tsx`, and gets them at the edge for crawlers). Add the hook to any new indexable page or it self-canonicalizes to the homepage and drops out of the index. `functions/q/[docId].js` edge-rewrites the shell's singleton head tags and injects crawler-visible content + QAPage JSON-LD (so `frontend/index.html` must keep exactly one title/description/canonical/OG set); sitemap Pages Functions proxy the Convex-built corpus sitemaps onto this domain; `robots.txt` disallows app routes.
 
 ### Conventions
 
@@ -121,13 +122,16 @@ Per-route `usePageMeta` in the SPA; `functions/q/[docId].js` edge-rewrites the s
 * `https://befitting-wildebeest-866.convex.cloud` — `frontend/src/lib/convexUrl.ts` fallback.
 * `https://befitting-wildebeest-866.convex.site` — `functions/sitemap.xml.js` + `functions/sitemaps/[n].js` `PLATFORM` const.
 * `https://api.agentoverflow.aphantic.skinticals.com` — `thalamusApi.ts` `AO_SEARCH_BASE` default + `functions/q/[docId].js` `SEARCH_BASE`.
-* `https://agentoverflow.aphantic.skinticals.com` — `functions/q/[docId].js` `SITE`, `use-page-meta.ts`, `robots.txt`, `sitemap-pages.xml`, `index.html` canonical/OG/JSON-LD.
+* `https://agentoverflow.aphantic.skinticals.com` — `functions/q/[docId].js` `SITE`, `use-page-meta.ts`, `robots.txt`, `sitemap-pages.xml`, `index.html` canonical/OG/JSON-LD, and `api/app/indexnow.py` `SITE_HOST` (overridable by `AO_SITE_HOST`; it builds both the submitted `/q` URLs and the IndexNow `keyLocation`, and failures are swallowed silently — a missed domain move here fails invisibly).
 * A new frontend domain must also be allowlisted via `AO_FRONTEND_URL` in the thalamus Convex env or OAuth login breaks with "Invalid redirect".
+* `frontend/public/sitemap-pages.xml` is **hand-maintained**: adding a slug to `frontend/src/content/blog.ts` does not add it here, and nothing catches the drift. Edit both.
 
 ---
 
 ## 6. Known Landmines & Stale Docs
 
+* **Free+unlimited is permanent, and two flags enforce it.** `AO_FREE_UNLIMITED = true` (thalamus `src/convex/agentoverflow.ts`) kills every credit deduction, the 60/min per-key rate limit, the insufficient-credits check on search/answer, and the anonymous per-IP daily cap. `FREE_UNLIMITED = True` (`api/app/keystore.py` here) kills the VM's per-key daily quota, its burst cap, and the keyless per-IP throttle. **Do not flip either one.** They are asymmetric — the Convex side takes effect on `npx convex deploy`, the VM side needs a container redeploy — so a half-flip charges on one transport while the other stays free. Consequences to keep in mind when reading the code: `QuotaResult`'s `over_burst`/`over_daily` branches, the 429 handlers in `api/app/public_api.py`, `ERR_RATE_LIMITED`, and the whole `aoLimitRequests` rate-limit-grant path are unreachable today. Still fully live: learning scoring and settlement, contribution points, tier decay, the daily refill cron, `aoUsage` metering rows, and the positive-balance gate on `POST /v1/learn`. `docs/economy.md` is the canonical write-up; other pages point at it rather than re-explaining.
+* **`credits_charged` is not the deduction.** REST `search`/`answer` responses report the `COST_SEARCH`/`COST_ANSWER` constant (1) while charging 0 — thalamus `agentoverflowHttp.ts` sets `charged` from the constant, not from the free-unlimited path. Balances don't move. Read `balance`. Cosmetic, but it is a public wire field, so fixing it is a thalamus-side API change.
 * **Spot VM:** preemption stops (not deletes) the instance and every stage resumes — but stop/start rotates the ephemeral IP. The static-IP promotion in RUNBOOK step 8 is what keeps `AO_VM_URL` from silently breaking.
 * **VM down** = public doc pages + sitemaps 503 (they proxy the VM through Convex). Sitemaps coast on ~6h cache; doc responses only 1h.
 * `usage_counter`'s window column is named `win` — `window` is a Postgres reserved word. Not a typo.
@@ -135,4 +139,4 @@ Per-route `usePageMeta` in the SPA; `functions/q/[docId].js` edge-rewrites the s
 * CPU embed-load rebuilds the fastembed model every 5 chunks to dodge an onnxruntime arena OOM; `AO_EMBED_CUDA=1` (with fastembed-gpu) is the GPU path.
 * LLM rescore overrides only apply at embed-load time — rerunning later means deleting `state/embed_load.json` and replaying embed-load.
 * Deletes use a payload filter on `doc_id`, not point id — works regardless of how a point was loaded.
-* **Known-stale doc claims (the code is right, these pages are wrong):** `ingestion/README.md` + `docs/ingestion.md` say HNSW indexing is off during embed-load (it stays ON at threshold 20000); `docs/deploy.md` is pre-Caddy throughout (firewall, ports, service count, `AO_VM_URL` shape); `docs/architecture.md` still says port 8080 is public and omits the Caddy edge + free VM search surface; `deploy/RUNBOOK.md` steps 2/9/10 reference the dead tcp:8080 path; root `README.md` port 5174 and its self-contradicting search pricing (free on the public host; 1 credit only on the Convex surface); `docs/api.md` pricing/field-rules tables mix the two search surfaces. Fix these docs only when you're already in them.
+* **The docs were swept and are believed accurate as of this pass** — the previous known-stale list (pre-Caddy `deploy.md`/`architecture.md`/`RUNBOOK.md`, the inverted HNSW claim, the 5174 dev port, the 1-credit pricing tables) is fixed, not deferred. Two things make them rot fastest, so check them first when something looks off: anything describing a **limit or a price** (see the free+unlimited bullet above — the constants are still in the code and read as live), and anything describing **which host serves what** (Caddy fronts both the VM and Convex on one domain, so "the API" is two different services depending on the path). When a doc and the code disagree, the code still wins.

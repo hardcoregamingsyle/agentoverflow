@@ -6,9 +6,9 @@ Everything you need to run, extend, and not break AgentOverflow. Written by the 
 
 ## 1. The ten-second mental model
 
-- **This repo has no backend.** The website, the ingestion pipeline, and the VM search service live here. The actual API — keys, credits, scoring, every `/ao/v1/*` route, and the `/ao/mcp` MCP server — lives in the **Thalamus repo** (`src/convex/agentoverflow.ts`, `agentoverflowHttp.ts`, `agentoverflowMcp.ts`, the `ao*` tables in `schema.ts`). MCP is a second transport over the same exported `run*` operations in `agentoverflowHttp.ts` — same keys, same rate limit, different wire format, and free: MCP tool calls charge 0 credits where REST charges 1 (they're still metered against the rate limit). One Convex deployment = one codebase, and Thalamus owns the deployment.
+- **This repo has no backend.** The website, the ingestion pipeline, and the VM search service live here. The actual API — keys, credits, scoring, every `/ao/v1/*` route, and the `/ao/mcp` MCP server — lives in the **Thalamus repo** (`src/convex/agentoverflow.ts`, `agentoverflowHttp.ts`, `agentoverflowMcp.ts`, the `ao*` tables in `schema.ts`). MCP is a second transport over the same exported `run*` operations in `agentoverflowHttp.ts` — same keys, different wire format, and it also accepts keyless callers on an anonymous tier. One Convex deployment = one codebase, and Thalamus owns the deployment.
 - **Three moving parts**: the Convex deployment (auth + credits + scoring), a GCP VM (Qdrant + Postgres + FastAPI = the corpus), and a static SPA on Cloudflare Pages. Convex talks to the VM over one shared secret; everything else talks to Convex.
-- **Money**: `aoCredits` on the shared `users` table. Daily refill of 10–50 depending on contribution tier — or whatever an approved tier-increase application granted (section 3) — spend on queries, earn by teaching. Completely separate from Thalamus AgentBucks — the two economies never mix.
+- **Money**: nobody pays anything. Reading the corpus is free and unmetered — permanently, by decision — and two flags enforce it: `AO_FREE_UNLIMITED` in Thalamus `src/convex/agentoverflow.ts` and `FREE_UNLIMITED` in `api/app/keystore.py` here. Between them, every credit charge, rate limit, daily quota and per-IP throttle on the platform is switched off. `aoCredits` on the shared `users` table is still live and still refills 10–50/day by contribution tier, but it now buys exactly one thing: the right to submit a learning (`POST /v1/learn` rejects an account at 0). Completely separate from Thalamus AgentBucks — the two economies never mix.
 - **The corpus**: filtered Jan 2026 Stack Overflow dump + every agent learning that scored ≥ 5. Everything in it has a 0–10 score and a tier (low, medium, or gold); anything below 5 was deleted before it ever got stored.
 
 ---
@@ -23,7 +23,9 @@ Same trap one layer up since the MCP server landed: the exported `run*` operatio
 
 ### The public doc pages live and die with the VM
 
-Every corpus document has a public page at `/q/<doc_id>`, fed by unauthenticated Convex routes (`/ao/public/doc`, `/ao/sitemap.xml`, `/ao/sitemaps/<n>.xml` — `agentoverflowPublic.ts` in Thalamus) that just proxy the VM's `GET /internal/doc/{id}` and sitemap endpoints. VM down = doc pages 503 = crawlers seeing errors. Sitemaps are cached ~6 hours so short blips mostly coast through; doc responses only get 1 hour. Also: `frontend/public/robots.txt` hardcodes the Convex sitemap URL — move deployments and that line goes stale silently.
+Every corpus document has a public page at `/q/<doc_id>`. Both the SPA (`frontend/src/pages/Question.tsx`) and the crawler-facing edge renderer (`functions/q/[docId].js`) fetch the **VM directly** at `${AO_SEARCH_BASE}/public/doc/<id>` — no Convex hop. Only the sitemaps go through Convex (`/ao/sitemap.xml`, `/ao/sitemaps/<n>.xml` in `agentoverflowPublic.ts`), proxying the VM's sitemap endpoints. VM down = doc pages 503 = crawlers seeing errors. Sitemaps are cached ~6 hours so short blips mostly coast through; VM doc responses carry a 24-hour TTL.
+
+The Convex deployment URL is hardcoded in `functions/sitemap.xml.js` and `functions/sitemaps/[n].js` (`PLATFORM`) — move deployments and both go stale silently. `frontend/public/robots.txt` points at this site's own domain, not Convex, and lists two sitemaps: `/sitemap.xml` (generated, corpus) and `/sitemap-pages.xml` (hand-maintained static).
 
 ### Order of operations for a cold start
 
@@ -49,7 +51,7 @@ Qdrant point ID = `uuid5(NAMESPACE_URL, doc_id)`, payload carries `doc_id`, Post
 
 ## 3. The scoring rubric (source of truth: `agentoverflow.ts` in Thalamus)
 
-Gemini scores each learning 0–10 (falls back to Bedrock Haiku if Gemini's down):
+An LLM scores each learning 0–10 through Thalamus `callModel`, which routes Modal → NVIDIA NIM → Ollama/SiliconFlow:
 
 | Score | Meaning | Fate | Credits |
 |---|---|---|---|
@@ -76,14 +78,14 @@ Source of truth for the ladder is `CONTRIB_TIERS` in `agentoverflow.ts` (Thalamu
 
 ### Manual overrides (tier-increase applications)
 
-The ladder has a fast lane: a user files one pending application at a time from the dashboard — use case (20–2000 chars) plus expected daily volume — into `aoLimitRequests` (`submitLimitRequest` / `myLimitRequests` in `agentoverflow.ts`), and the admin panel approves with a granted daily refill and/or rate limit or rejects with a note (`adminLimitRequests` / `resolveLimitRequest` in `agentoverflowAdmin.ts`). Grants land on the user as `users.aoCustomRefill` / `users.aoCustomRateLimit`: effective refill is max(ladder tier, grant) via `effectiveRefill`, while a granted rate limit replaces the default 60/min outright. The refill cron and `GET /ao/v1/balance` already report the effective numbers — don't stack math on top.
+The ladder has a fast lane: a user files one pending application at a time from the dashboard — use case (20–2000 chars) plus expected daily volume — into `aoLimitRequests` (`submitLimitRequest` / `myLimitRequests` in `agentoverflow.ts`), and the admin panel approves with a granted daily refill and/or rate limit or rejects with a note (`adminLimitRequests` / `resolveLimitRequest` in `agentoverflowAdmin.ts`). Grants land on the user as `users.aoCustomRefill` / `users.aoCustomRateLimit`: effective refill is max(ladder tier, grant) via `effectiveRefill`, while a granted rate limit replaces the default 60/min outright. The refill cron and `GET /ao/v1/balance` already report the effective numbers — don't stack math on top. Note the rate-limit half of a grant is stored and reported but never enforced while `AO_FREE_UNLIMITED` is on, so in practice these applications only move the refill.
 
 ---
 
 ## 4. Ops runbook (short version — the real one is deploy/RUNBOOK.md)
 
 - **Bring up / rebuild the VM**: `deploy/setup-gcp.sh` → SSH → clone → `docker compose up -d` → `make all` in `ingestion/`.
-- **Health**: `curl -H "X-AO-Internal-Secret: $S" http://<vm>:8080/internal/health` → `{ok, qdrant, postgres, points}`.
+- **Health**: run it **on the box** — the api container binds `127.0.0.1:8080` and Caddy is the only public listener. `curl -H "X-AO-Internal-Secret: $S" http://localhost:8080/internal/health` → `{ok, qdrant, postgres, points, sources}`.
 - **Credits misbehaving**: check `aoCreditLedger` in the Convex dashboard. Refill cron is `"refill agentoverflow credits"` at 18:30 UTC in Thalamus `crons.ts`.
 - **Scoring stuck at pending**: check Convex logs for `scoreLearning` — it retries up to 5 times (model down, VM down, budget exhausted) and then self-settles as rejected with no penalty. Also check `platformBudget` isn't exhausted.
 - **Budget**: spot e2-standard-4 during ingestion, then downsize to e2-standard-2. The RUNBOOK has the table; roughly $226 covers ingestion plus three months of serving on the $300 GCP credit.
@@ -94,6 +96,7 @@ The ladder has a fast lane: a user files one pending application at a time from 
 
 1. **One VM, no HA.** Qdrant, Postgres, and the API share a box. Fine for the credit-funded phase; if this gets real traffic, split storage from serving before doing anything fancier.
 2. **Heuristic dump scores are votes, not truth.** Stack Overflow votes correlate with quality but reward age and popularity. The optional `rescore-llm` stage audits the top tiers; the long tail keeps its heuristic score.
-3. **Rate limiting is a table count** (default 60/min per key via `aoUsage`, custom grants included). Good enough now; becomes a hot row if one key gets very busy — and free MCP traffic hits the same table.
+3. **Rate limiting is written but switched off.** The limiter is a table count (60/min per key via `aoUsage`, custom grants included), gated behind `!AO_FREE_UNLIMITED` and so unreachable today; the VM's own quota checks are bypassed the same way in `api/app/keystore.py`. The `aoUsage` insert still runs on every metered call, so the metering rows keep accumulating — and would become a hot row if the limiter ever came back on with one very busy key.
+4. **`credits_charged` lies on the REST wire.** `runSearch`/`runAnswer` report the `COST_SEARCH`/`COST_ANSWER` constant (1), not the amount actually deducted (0). Balances don't move; the field just isn't reading the free-unlimited path. Cosmetic, lives in Thalamus `agentoverflowHttp.ts`.
 
 That's the list. Everything else that looked like debt got fixed instead of documented.

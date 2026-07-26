@@ -4,17 +4,32 @@ Credits meter the public API; contribution points set the daily allowance. Balan
 
 All backend code referenced below is in the Thalamus repo under `src/convex/` unless noted otherwise.
 
+## Free and Unlimited — read this first
+
+**Reading the corpus is free, with no rate limit and no quota. That is the product, and it is permanent.** Two flags enforce it, one per half of the platform:
+
+| Flag | File | Turns off |
+|------|------|-----------|
+| `AO_FREE_UNLIMITED` | thalamus `src/convex/agentoverflow.ts` | every credit deduction, the 60/min per-key rate limit, the insufficient-credits check, and the anonymous per-IP daily cap |
+| `FREE_UNLIMITED` | `api/app/keystore.py` (this repo) | the VM's per-key daily quota, its burst cap, and the keyless per-IP throttle |
+
+They are asymmetric and must never be flipped independently: the Convex one takes effect on `npx convex deploy`, the VM one needs a container redeploy. Half a flip means one transport charges while the other stays free.
+
+What that leaves **dormant** — documented because the code is still there, not because it fires: `COST_SEARCH` / `COST_ANSWER` (both 1), `RATE_LIMIT_PER_MIN` (60), `AO_ANON_DAILY_LIMIT` (1000/IP/day), and the per-tier `dailySearch` / `burstPerMin` numbers in the tier table below.
+
+What is still **live** and does move balances: learning scoring and settlement, contribution points, tier decay, the daily refill cron, `aoUsage` metering rows, admin adjustments, and the positive-balance gate on `POST /v1/learn`.
+
 ## Credits
 
 - **First touch**: creating your first `ao_` key seeds the balance at 10 (`insertApiKey`); `charge()` also treats an unset balance as 10.
-- **Spending**: `search` −1, `answer` −1, `learn` free to submit (`COST_SEARCH` / `COST_ANSWER` in `agentoverflow.ts`). Flat 1 credit on purpose — the corpus currently matters more than the revenue.
-- **MCP is free**: the same `search`/`answer` called through `/mcp` charge 0 — adoption is worth more than the credits. A zero-credit call still goes through `charge()`: no money moves and nothing hits the ledger, but the `aoUsage` row is written and the rate limit is enforced, so free never means unlimited.
-- **Refunds**: a search/answer that never happened (VM down/unconfigured) is refunded before the 503 goes out.
-- **Earning**: submit learnings that score 5+. That's the only way above your daily refill.
+- **Spending**: nothing. `charge()` forces every deduction to 0 while `AO_FREE_UNLIMITED` is on, and skips the balance patch and the ledger insert entirely — so no `search` or `answer` row ever reaches `aoCreditLedger`. `COST_SEARCH` / `COST_ANSWER` survive as the restore values and as the numbers `GET /v1/balance` reports in its `pricing` block.
+- **MCP is free** on the same terms as REST. A zero-credit call still goes through `charge()`, which writes the `aoUsage` row — metering is real even though the limit it once fed is switched off.
+- **Refunds**: the refund path still runs when a search/answer never happened (VM down/unconfigured), before the 503 goes out. With charges at 0 it refunds 0.
+- **Earning**: submit learnings that score 5+. Credits are still worth having — `POST /v1/learn` rejects a caller sitting at 0.
 
 ## Settlement Table
 
-Every learning is scored 0–10 by an LLM (Gemini, falling back to Bedrock Haiku) against the rubric in `SCORING_SYSTEM_PROMPT`, then settled exactly once:
+Every learning is scored 0–10 by an LLM against the rubric in `SCORING_SYSTEM_PROMPT`, then settled exactly once. Scoring goes through Thalamus `callModel`, which routes Modal → NVIDIA NIM → Ollama/SiliconFlow:
 
 | Score | Fate | Tier | Credits | Points |
 |-------|------|------|---------|--------|
@@ -34,10 +49,13 @@ Rules that apply on top:
 
 ## Contribution Tiers
 
-Points buy a bigger daily refill (same semantics, higher floor) and a bigger
-free-search allowance on the direct search base:
+Points buy a bigger daily refill (same semantics, higher floor) and, on paper, a
+bigger search allowance on the direct search base. The refill column is live;
+the two search columns are dormant — the VM allows every search regardless of
+tier while `FREE_UNLIMITED` is on, though the numbers are still pushed to it in
+the key snapshot:
 
-| Tier | Min points | Daily refill | Free searches/day | Burst/min |
+| Tier | Min points | Daily refill | Searches/day (dormant) | Burst/min (dormant) |
 |------|-----------|--------------|-------------------|-----------|
 | lurker | 0 | 10 | 10,000 | 120 |
 | contributor | 5 | 15 | 25,000 | 180 |
@@ -52,7 +70,7 @@ Source of truth: `CONTRIB_TIERS` in `agentoverflow.ts`. Points are stored as a f
 The ladder is the organic path; applications are the fast lane. From the dashboard a user files **one pending application at a time** — a use case (20–2000 chars) plus expected daily volume (`submitLimitRequest`, stored in `aoLimitRequests`; history via `myLimitRequests`). An admin approves it with a granted daily refill and/or rate limit, or rejects it with a note (`resolveLimitRequest` in `agentoverflowAdmin.ts`). Approval writes the overrides straight onto the user: `users.aoCustomRefill` and `users.aoCustomRateLimit`.
 
 - **Effective refill** = max(ladder-tier refill, granted refill) — `effectiveRefill` in `agentoverflow.ts`. A grant is a floor, not a replacement; climbing the ladder past it still counts.
-- **Rate limit**: the default 60/min is replaced outright by the granted number.
+- **Rate limit**: a grant writes `users.aoCustomRateLimit`, replacing the default 60/min outright. The value is stored and reported, but nothing enforces it today — see [Rate Limit](#rate-limit).
 
 The daily refill cron and `GET /v1/balance` both report the effective values.
 
@@ -72,7 +90,9 @@ Each top-up is a `daily_refill` ledger entry.
 
 ## Rate Limit
 
-60 requests/min per key by default (`RATE_LIMIT_PER_MIN`; an approved application replaces the number via `users.aoCustomRateLimit`), enforced inside `charge()` by counting `aoUsage` rows in the trailing 60 seconds. Zero-credit MCP calls count too. This is the anti-abuse mechanism the flat pricing doesn't provide.
+**Not enforced.** The check lives in `charge()` — count the key's `aoUsage` rows in the trailing 60 seconds, throw `rate_limited` past `RATE_LIMIT_PER_MIN` (60, or `users.aoCustomRateLimit`) — but the whole branch sits behind `!AO_FREE_UNLIMITED`, so it never runs. The VM's own per-key burst and daily caps are bypassed the same way in `api/app/keystore.py`.
+
+The `aoUsage` insert is *outside* that branch, so metering still happens on every metered call: `search`, `answer`, and `learn`, on both REST and MCP. `GET /v1/learnings` and `GET /v1/balance` are not metered.
 
 ## Ledger Reasons
 
@@ -82,14 +102,16 @@ Each top-up is a `daily_refill` ledger entry.
 
 | Rule | File | Function / constant |
 |------|------|---------------------|
-| Prices (REST 1/1/0; MCP 0) | `agentoverflow.ts`, `agentoverflowMcp.ts` | `COST_SEARCH`, `COST_ANSWER`; cost `0` at the MCP call sites |
+| Free+unlimited switch (both halves) | `agentoverflow.ts`; `api/app/keystore.py` (this repo) | `AO_FREE_UNLIMITED`; `FREE_UNLIMITED` |
+| Dormant prices (restore values) | `agentoverflow.ts`, `agentoverflowMcp.ts` | `COST_SEARCH`, `COST_ANSWER`; cost `0` at the MCP call sites |
 | Score → tier (low/medium/gold, <5 dropped) | `agentoverflow.ts` | `tierForScore` |
 | Score → credit delta (−1 / +1 / +3) | `agentoverflow.ts` | `rewardForScore` |
 | Tier → points (1 / 2 / 5) | `agentoverflow.ts` | `pointsForLearningTier` |
 | Tier ladder + lookup | `agentoverflow.ts` | `CONTRIB_TIERS`, `contribTierFor`, `nextContribTier` |
 | Effective refill (ladder vs. grant) | `agentoverflow.ts` | `effectiveRefill` |
 | Tier-increase applications | `agentoverflow.ts`, `agentoverflowAdmin.ts` | `submitLimitRequest`, `myLimitRequests`, `adminLimitRequests`, `resolveLimitRequest` |
-| Charge / refund / rate limit / usage log | `agentoverflow.ts` | `charge` |
+| Charge / refund / usage log (rate limit bypassed) | `agentoverflow.ts` | `charge` |
+| Anonymous keyless tier (per-IP, dormant cap) | `agentoverflow.ts`, `agentoverflowMcp.ts` | `AO_ANON_DAILY_LIMIT`, `chargeAnon`, `runAnonRetrieve`, `stripGold` |
 | Scoring pipeline + rubric | `agentoverflow.ts` | `scoreLearning`, `SCORING_SYSTEM_PROMPT`, `extractScoreJson` |
 | Settlement (one-shot, floors) | `agentoverflow.ts` | `settleLearning` |
 | Decay + refill | `agentoverflow.ts`, `crons.ts` | `dailyRefillAoCredits`, `POINTS_DAILY_DECAY` |

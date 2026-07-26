@@ -72,8 +72,22 @@ CLI flavour, if you'd rather not click: from the repo root,
 ```
 src/
   lib/thalamusApi.ts   # every Convex function this app calls, typed, in one place
+  lib/convexUrl.ts     # deployment URL + prod fallback
+  lib/badgeStyles.ts   # tier/status palettes shared by Dashboard and Admin
+  lib/gpu.ts           # capability probe gating the heavy landing scene
   hooks/use-auth.ts    # localStorage token ("agentoverflow_session_token") + getUserByToken
-  components/          # Layout shell, CodeBlock (copy button), tier/status badges
+  hooks/use-page-meta.ts  # per-route title/description/canonical — add it to any new indexable page
+  hooks/use-reveal.ts  # one-shot scroll reveal
+  content/blog.ts      # the blog's source of truth (slugs must be mirrored into public/sitemap-pages.xml)
+  components/          # Layout shell, CodeBlock (copy button), tier/status badges, markdown renderers
   components/ui/       # vendored shadcn primitives — don't customize
-  pages/               # Landing, Docs, Auth, Dashboard, Playground, NotFound
+  pages/               # 16 routed pages; main.tsx is the list
 ```
+
+One layer sits outside `src/`: the repo-root `functions/` directory holds
+Cloudflare Pages Functions. `functions/q/[docId].js` prerenders `/q/<docId>` for
+crawlers by rewriting the shell's head tags with HTMLRewriter and injecting
+visible content plus QAPage JSON-LD — which is why `index.html` must carry
+exactly one title, description, canonical and OG set. `functions/sitemap.xml.js`
+and `functions/sitemaps/[n].js` proxy the Convex-built corpus sitemaps onto this
+domain. It's the part a newcomer is most likely to break without noticing.
