@@ -7,7 +7,10 @@ module is importable without them installed.
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
+
+from app.embedding import VECTOR_SIZE
 
 COLLECTION = "ao_corpus"
 
@@ -51,7 +54,9 @@ def ensure_collection() -> None:
         return
     client.create_collection(
         collection_name=COLLECTION,
-        vectors_config=qm.VectorParams(size=384, distance=qm.Distance.COSINE, on_disk=True),
+        vectors_config=qm.VectorParams(
+            size=VECTOR_SIZE, distance=qm.Distance.COSINE, on_disk=True
+        ),
         quantization_config=qm.ScalarQuantization(
             scalar=qm.ScalarQuantizationConfig(type=qm.ScalarType.INT8)
         ),
@@ -77,16 +82,33 @@ def postgres_health() -> bool:
         return False
 
 
+# documents.source has no index, so the breakdown is a sequential scan of a
+# multi-million-row table. The docker healthcheck calls /internal/health every
+# 30s and the admin panel reads the same payload, so the result is memoized —
+# corpus counts move on ingestion timescales, not on a 30-second probe's.
+SOURCE_COUNTS_TTL_SECONDS = 600
+_source_counts: dict[str, int] | None = None
+_source_counts_at = 0.0
+
+
 def corpus_source_counts() -> dict[str, int]:
-    """Breakdown of corpus documents by source (so, learning)."""
+    """Breakdown of corpus documents by source (so, learning), cached 10 min."""
+    global _source_counts, _source_counts_at
+
+    now = time.monotonic()
+    if _source_counts is not None and now - _source_counts_at < SOURCE_COUNTS_TTL_SECONDS:
+        return _source_counts
+
     try:
         with get_pool().connection() as conn:
             rows = conn.execute(
                 "SELECT source, COUNT(*) as cnt FROM documents GROUP BY source"
             ).fetchall()
-            counts: dict[str, int] = {}
-            for source, cnt in rows:
-                counts[source] = cnt
-            return counts
+        counts = {source: int(cnt) for source, cnt in rows}
     except Exception:
+        # Don't cache a failure — the next probe should retry.
         return {}
+
+    _source_counts = counts
+    _source_counts_at = now
+    return counts

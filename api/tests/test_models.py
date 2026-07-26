@@ -204,8 +204,10 @@ class SecretHeaderTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertEqual(set(body), {"ok", "qdrant", "postgres", "points"})
+        self.assertEqual(set(body), {"ok", "qdrant", "postgres", "points", "sources"})
         self.assertIsInstance(body["points"], int)
+        # No Postgres in this run, so the per-source breakdown is empty, not absent.
+        self.assertEqual(body["sources"], {})
 
 
 @unittest.skipUnless(HAS_PYDANTIC, "pydantic not installed")

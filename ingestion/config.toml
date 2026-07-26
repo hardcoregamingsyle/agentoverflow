@@ -14,7 +14,6 @@ data_dir = "/scratch/ao-ingest"
 # Jan 2026 snapshot of the archive.org "stackexchange" item.
 posts_url = "https://archive.org/download/stackexchange/stackoverflow.com-Posts.7z"
 postlinks_url = "https://archive.org/download/stackexchange/stackoverflow.com-PostLinks.7z"
-tags_url = "https://archive.org/download/stackexchange/stackoverflow.com-Tags.7z"
 aria2_connections = 16
 
 [filter]
@@ -30,7 +29,9 @@ target_high_frac = 0.15  # ~15% score 8-9
 min_keep_score = 5       # everything below is dropped entirely — 0-4 is trash
 
 [rescore]
-model = "gemini-flash-lite"
+# Must be a real versioned id — it goes straight into the v1beta REST path and a
+# 404 isn't retryable, so a wrong id kills the stage on the first record.
+model = "gemini-3.1-flash-lite"
 min_score = 8            # only heuristic >= 8 goes to the LLM
 max_chars = 8000         # problem+solution character budget in the prompt
 
