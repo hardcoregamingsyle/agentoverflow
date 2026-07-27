@@ -150,14 +150,16 @@ sudo apt-get install -y tmux && tmux new -s ingest
 python -m ingestion download      # ~1-2 h   (archive.org SO dump, ~60 GB)
 python -m ingestion filter        # ~4-8 h   (stream-parse Posts.xml)
 python -m ingestion score         # fast     (heuristic 0-10, drops <5)
-python -m ingestion rescore-llm   # optional (Gemini re-score, ~$20-60; skippable)
+python -m ingestion rescore-llm   # optional (NVIDIA NIM re-score, free tier; skippable)
 python -m ingestion embed-load    # ~12-24 h (embeddings -> Qdrant, text -> Postgres)
 python -m ingestion graph-load    # fast     (PostLinks -> doc_links)
 ```
 
 `embed-load` is what fills `doc_tags`; `graph-load` writes `doc_links` and
-nothing else. `rescore-llm` needs `GEMINI_API_KEY` in the environment and calls
-the model pinned in `ingestion/config.toml` — currently `gemini-3.1-flash-lite`.
+nothing else. `rescore-llm` needs `NIM_API_KEYS` (comma-separated) in the
+environment and calls the model pinned in `ingestion/config.toml` — currently
+`meta/llama-3.3-70b-instruct`. Every key supplied is graded against
+concurrently, each held to its own 40 RPM.
 
 Every stage is resumable; if the spot VM gets preempted, start it again and
 re-run the interrupted stage. Detach tmux with `Ctrl-b d`, reattach with
