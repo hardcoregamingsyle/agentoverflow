@@ -90,14 +90,17 @@ seeded 200k reservoir sample (error is a small fraction of one score bucket).
 Resume: calibration is cached in `state/score_calibration.json` (delete it to
 recalibrate); shards with existing `scored-*` output are skipped.
 
-### 4. rescore-llm — optional, hours to days depending on rate limits, ~$20-60
+### 4. rescore-llm — optional, hours to days depending on rate limits, free-tier friendly
 
-Second opinion on everything the heuristic put at 8+. Gemini
-(`rescore.model`, REST `generateContent`, key from `GEMINI_API_KEY`) grades
-each item 0-10 on the learning rubric — correctness plausibility, specificity,
-reusability, non-triviality — and the verdict is clamped to 7-10: it can
-demote a medium to low or promote to gold, nothing else. 429/5xx get
-exponential backoff honoring Retry-After.
+Second opinion on everything the heuristic put at 8+. An NVIDIA NIM
+free-endpoint model (`rescore.model`, OpenAI-compatible `/v1/chat/completions`,
+keys from comma-separated `NIM_API_KEYS`) grades each item 0-10 on the
+learning rubric — correctness plausibility, specificity, reusability,
+non-triviality — and the verdict is clamped to 7-10: it can demote a medium to
+low or promote to gold, nothing else. Graded concurrently across every key
+supplied, each held to its own 40 RPM — that's what turns N keys into N x the
+throughput instead of one key's cap stalling the rest. 429/5xx get exponential
+backoff honoring Retry-After.
 
 Skip it entirely with `python -m ingestion rescore-llm --skip` (or
 `make skip-rescore`) — embed-load then uses heuristic scores as-is.

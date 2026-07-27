@@ -75,7 +75,7 @@ python -m unittest discover -s api/tests -v
 ```
 
 * The Makefile `cd`s to the repo root internally, so `python -m ingestion <stage>` from the root is equivalent.
-* `rescore-llm` needs `GEMINI_API_KEY` in the environment; skip it with `python -m ingestion rescore-llm --skip`.
+* `rescore-llm` needs `NIM_API_KEYS` (comma-separated NVIDIA NIM keys) in the environment; skip it with `python -m ingestion rescore-llm --skip`.
 * **CI (`.github/workflows/ci.yml`)** runs two jobs on every push to `main`: frontend type-check + lint + build (inside `frontend/`, since the root `package.json` only has `build`), and both Python suites. It installs only `fastapi`/`pydantic`/`httpx` — the lazy-import convention below is what keeps the heavy deps out. There is no lockfile-sync gate: this repo has no `package-lock.json` (Cloudflare Pages builds it with bun), so don't copy thalamus's `npm ci --dry-run` step here. The cross-repo `makeFunctionReference` check can't run from this repo either — it needs the Convex backend, so it belongs in thalamus CI with this repo checked out beside it.
 
 ### Environment Variables

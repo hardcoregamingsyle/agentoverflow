@@ -69,7 +69,7 @@ Relative paths resolve against the file's directory; use an absolute `data_dir` 
 | `[score]` | `sample_size`, `sample_seed` | reservoir sample for percentile calibration (200000, 1337 — deterministic) |
 | | `target_gold_frac`, `target_high_frac` | calibration targets: ~5% tens, ~15% 8–9s |
 | | `min_keep_score` | below this is dropped entirely (5) |
-| `[rescore]` | `model` | Gemini model for the re-score pass (`gemini-3.1-flash-lite`). Must be a real versioned id — it goes straight into the v1beta REST path, and a 404 isn't retryable, so a wrong id kills the stage on the first record. |
+| `[rescore]` | `model` | NVIDIA NIM model for the re-score pass (`meta/llama-3.3-70b-instruct`). Must be a real catalog id — a wrong one 404s on the first call, and that isn't retryable, so it kills the stage before grading anything. |
 | | `min_score` | only heuristic ≥ N goes to the LLM (8) |
 | | `max_chars` | problem+solution budget per prompt (8000) |
 | `[qdrant]` | `url`, `collection` | `http://localhost:6333`, `ao_corpus` |
@@ -92,8 +92,8 @@ state/    filter.sqlite, *.json state files, score_calibration.json,
 
 The stage is skippable at ingest time (`make skip-rescore` stamps it done and `embed-load` uses heuristic scores as-is). To run it afterwards with a real key:
 
-1. `export GEMINI_API_KEY=...` — the stage exits immediately without it.
-2. Delete `state/rescore.json` (the skip/done stamp), then run `python -m ingestion rescore-llm`. It grades every heuristic-8+ item 0–10 on the learning rubric via REST `generateContent`, with exponential backoff honoring `Retry-After`; the verdict is clamped to 7–10, so it can demote a medium to low or promote to gold — nothing else.
+1. `export NIM_API_KEYS=key1,key2,...` — the stage exits immediately without it. Every key supplied is graded against concurrently, each held to its own 40 RPM.
+2. Delete `state/rescore.json` (the skip/done stamp), then run `python -m ingestion rescore-llm`. It grades every heuristic-8+ item 0–10 on the learning rubric via the OpenAI-compatible `/v1/chat/completions`, with exponential backoff honoring `Retry-After`; the verdict is clamped to 7–10, so it can demote a medium to low or promote to gold — nothing else.
 3. Overrides only take effect at load time: delete `state/embed_load.json` and re-run `python -m ingestion embed-load`. Point ids are deterministic and Postgres inserts upsert, so the replay overwrites in place.
 
 ## Tests
