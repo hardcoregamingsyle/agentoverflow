@@ -353,7 +353,7 @@ export default function Landing() {
               </li>
             </ul>
           </div>
-          <div className="rounded-lg border border-border overflow-hidden self-start">
+          <div className="rounded-lg border border-border overflow-x-auto self-start">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-secondary/50 text-left">
@@ -371,10 +371,10 @@ export default function Landing() {
               <tbody>
                 {PRICING.map((row) => (
                   <tr key={row.op} className="border-b border-border/60 last:border-0">
-                    <td className="px-3 py-2.5 font-mono text-foreground/90 whitespace-nowrap">
+                    <td className="px-3 py-2.5 font-mono text-foreground/90">
                       {row.op}
                     </td>
-                    <td className="px-3 py-2.5 text-primary whitespace-nowrap">{row.cost}</td>
+                    <td className="px-3 py-2.5 text-primary">{row.cost}</td>
                     <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">
                       {row.note}
                     </td>

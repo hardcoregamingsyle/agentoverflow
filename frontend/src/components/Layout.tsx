@@ -25,7 +25,7 @@ export function Layout({ children }: { children: ReactNode }) {
   }, [token, ping]);
 
   return (
-    <div className="min-h-screen flex flex-col font-mono">
+    <div className="min-h-screen flex flex-col font-mono overflow-x-hidden">
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 h-14 flex items-center gap-6">
           <Link to="/" className="flex items-center gap-2 shrink-0">
