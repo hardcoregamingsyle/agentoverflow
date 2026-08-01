@@ -85,7 +85,15 @@ class _KeyRateLimiter:
 
     acquire() blocks until some key has headroom, then returns that key —
     this is what lets N keys behave as N x 40 RPM instead of the first
-    thread to grab a key hogging it past its own cap.
+    thread to grab a key hogging it past its own cap. Every attempt of a
+    grading call must go through acquire(), retries included — a retry that
+    reuses its original key without re-checking the limiter is exactly what
+    turns one 429 into a pile-up on that key.
+
+    penalize() marks a key as fully spent for a rolling minute the instant a
+    429 comes back for it. A server-side rejection is stronger evidence than
+    our own request-timestamp forecast, so it overrides the forecast instead
+    of waiting for it to naturally agree.
     """
 
     def __init__(self, keys: list[str], rpm: int) -> None:
@@ -104,6 +112,10 @@ class _KeyRateLimiter:
                         hist.append(now)
                         return key
             time.sleep(0.25)
+
+    def penalize(self, key: str) -> None:
+        with self._lock:
+            self._history[key] = [time.monotonic()] * self._rpm
 
 
 def run(cfg: Config, skip: bool = False) -> None:
@@ -158,8 +170,7 @@ def run(cfg: Config, skip: bool = False) -> None:
             nonlocal graded
             prompt = build_prompt(rec["title"], rec["problem"], rec["solution"],
                                   cfg.rescore_max_chars)
-            key = limiter.acquire()
-            llm = _grade_with_retries(cfg.rescore_model, key, prompt)
+            llm = _grade_with_retries(cfg.rescore_model, limiter, prompt)
             line = json.dumps({"qid": rec["qid"], "llm_score": llm,
                                "score": final_score(llm)}) + "\n"
             with write_lock:
@@ -207,16 +218,20 @@ def _call_nim(model: str, api_key: str, prompt: str) -> str:
     return data["choices"][0]["message"]["content"]
 
 
-def _grade_with_retries(model: str, api_key: str, prompt: str) -> int:
+def _grade_with_retries(model: str, limiter: "_KeyRateLimiter", prompt: str) -> int:
     delay = 2.0
     for attempt in range(_MAX_ATTEMPTS):
+        key = limiter.acquire()
         try:
-            return parse_grade(_call_nim(model, api_key, prompt))
+            return parse_grade(_call_nim(model, key, prompt))
         except urllib.error.HTTPError as err:
+            if err.code == 429:
+                limiter.penalize(key)
             if err.code not in _RETRYABLE or attempt == _MAX_ATTEMPTS - 1:
                 raise
             retry_after = err.headers.get("Retry-After")
-            time.sleep(min(float(retry_after) if retry_after else delay, 120.0))
+            if retry_after:
+                time.sleep(min(float(retry_after), 120.0))
         except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError):
             if attempt == _MAX_ATTEMPTS - 1:
                 raise

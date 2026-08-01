@@ -1,8 +1,16 @@
 """Tests for the pure parts of the rescore-llm stage (no network)."""
 
 import unittest
+import urllib.error
+from unittest.mock import patch
 
-from ingestion.stages.rescore_llm import build_prompt, final_score, parse_grade
+from ingestion.stages.rescore_llm import (
+    _KeyRateLimiter,
+    _grade_with_retries,
+    build_prompt,
+    final_score,
+    parse_grade,
+)
 
 
 class TestParseGrade(unittest.TestCase):
@@ -46,6 +54,48 @@ class TestBuildPrompt(unittest.TestCase):
     def test_truncates_long_bodies(self):
         prompt = build_prompt("t", "p" * 100_000, "s" * 100_000, 8000)
         self.assertLess(len(prompt), 9000)
+
+
+class TestKeyRateLimiter(unittest.TestCase):
+    def test_acquire_fills_one_key_before_moving_to_the_next(self):
+        limiter = _KeyRateLimiter(["a", "b"], rpm=2)
+        self.assertEqual([limiter.acquire() for _ in range(4)], ["a", "a", "b", "b"])
+
+    def test_penalize_makes_a_key_unavailable_immediately(self):
+        limiter = _KeyRateLimiter(["a", "b"], rpm=40)
+        limiter.penalize("a")
+        self.assertEqual(limiter.acquire(), "b")
+
+
+class TestGradeWithRetries(unittest.TestCase):
+    def test_429_penalizes_the_key_and_the_retry_uses_a_different_one(self):
+        # Regression test: a prior version acquired a key once and retried on
+        # it directly, so a 429 just kept hammering the same already-limited
+        # key until all attempts were exhausted and the whole stage crashed.
+        limiter = _KeyRateLimiter(["a", "b"], rpm=40)
+        calls = []
+
+        def fake_call_nim(model, key, prompt):
+            calls.append(key)
+            if key == "a":
+                raise urllib.error.HTTPError("url", 429, "Too Many Requests", {}, None)
+            return '{"score": 8, "reason": "ok"}'
+
+        with patch("ingestion.stages.rescore_llm._call_nim", side_effect=fake_call_nim):
+            score = _grade_with_retries("model", limiter, "prompt")
+
+        self.assertEqual(score, 8)
+        self.assertEqual(calls, ["a", "b"])
+
+    def test_non_retryable_status_raises_immediately(self):
+        limiter = _KeyRateLimiter(["a"], rpm=40)
+
+        def fake_call_nim(model, key, prompt):
+            raise urllib.error.HTTPError("url", 404, "Not Found", {}, None)
+
+        with patch("ingestion.stages.rescore_llm._call_nim", side_effect=fake_call_nim):
+            with self.assertRaises(urllib.error.HTTPError):
+                _grade_with_retries("model", limiter, "prompt")
 
 
 if __name__ == "__main__":
