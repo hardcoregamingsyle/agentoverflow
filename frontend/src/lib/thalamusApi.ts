@@ -398,6 +398,19 @@ export const AO_SEARCH_BASE =
   "https://api.agentoverflow.aphantic.skinticals.com";
 
 /**
+ * Base for the browser-facing corpus reads (playground search, /q doc loads).
+ *
+ * In production these go through the SAME-ORIGIN Pages Function proxy at
+ * /api/* (functions/api/[[path]].js) instead of the VM host directly: a
+ * cross-origin call needs CORS on the VM, and a stale VM container without
+ * the CORS middleware made every browser call die at preflight as
+ * "Failed to fetch". Same-origin removes that failure class entirely.
+ * Dev has no Pages Functions, so it calls the VM directly (which needs the
+ * VM's CORS middleware deployed — redeploy the api container if dev fails).
+ */
+export const PUBLIC_READ_BASE = import.meta.env.DEV ? AO_SEARCH_BASE : "/api";
+
+/**
  * Keyless public search — powers the playground and the SearchAction landing so
  * a logged-out visitor can try a query before signing up. Hits the VM's
  * IP-throttled `/public/search` and maps its `doc_id` onto the `id` the UI uses.
@@ -406,7 +419,7 @@ export async function publicSearch(
   query: string,
   tags: string[],
 ): Promise<SearchResult[]> {
-  const res = await fetch(`${AO_SEARCH_BASE}/public/search`, {
+  const res = await fetch(`${PUBLIC_READ_BASE}/public/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query, top_k: 5, ...(tags.length ? { tags } : {}) }),

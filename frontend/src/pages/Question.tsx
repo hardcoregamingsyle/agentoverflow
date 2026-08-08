@@ -3,7 +3,7 @@ import { SolutionBody } from "@/components/SolutionBody";
 import { TierBadge } from "@/components/TierBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AO_SEARCH_BASE } from "@/lib/thalamusApi";
+import { PUBLIC_READ_BASE } from "@/lib/thalamusApi";
 import type { LearningTier } from "@/lib/thalamusApi";
 import { ArrowRight, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -59,7 +59,9 @@ export default function Question() {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset to loading synchronously when the doc id (or a retry) changes; the fetch result lands later
     setState({ kind: "loading" });
-    fetch(`${AO_SEARCH_BASE}/public/doc/${encodeURIComponent(docId ?? "")}`)
+    // Same-origin proxy in prod (see PUBLIC_READ_BASE) — a direct VM call
+    // needs CORS headers the deployed container may not have.
+    fetch(`${PUBLIC_READ_BASE}/public/doc/${encodeURIComponent(docId ?? "")}`)
       .then(async (res) => {
         if (cancelled) return;
         if (res.status === 404) {
