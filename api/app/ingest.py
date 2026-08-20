@@ -46,8 +46,11 @@ def run_ingest(req: IngestRequest) -> str:
     client = get_qdrant()
     vector = embed_text(embedding_input(req.title, req.problem))
 
+    # limit=6, not 1: the top hit is still what the dedup check below uses,
+    # the rest seed doc_links (see below) — one query serves both instead of
+    # a second round-trip for neighbors after the upsert.
     top = client.query_points(
-        collection_name=COLLECTION, query=vector, limit=1, with_payload=["doc_id"]
+        collection_name=COLLECTION, query=vector, limit=6, with_payload=["doc_id"]
     ).points
     if top:
         duplicate_of = str((top[0].payload or {}).get("doc_id", ""))
@@ -91,6 +94,37 @@ def run_ingest(req: IngestRequest) -> str:
         for tag in dict.fromkeys(req.tags):
             conn.execute(
                 "INSERT INTO doc_tags (doc_id, tag) VALUES (%s, %s)", (req.doc_id, tag)
+            )
+
+        # Graph edges: a doc ingested through this path has no curated
+        # PostLinks-style relation the way a Stack Overflow import does, so
+        # its neighbors are the nearest embeddings instead — the same 1-hop
+        # expansion the search path already rides for SO docs (search.py
+        # _expand_neighbors), just discovered via cosine similarity rather
+        # than a human-curated link. kind=0 marks a semantic edge, distinct
+        # from the SO dump's kind=1 (linked) / kind=3 (duplicate). Inserted
+        # in both directions — unlike PostLinks, cosine similarity has no
+        # inherent direction, so a search landing on the neighbor needs its
+        # own edge back to expand here too.
+        conn.execute(
+            "DELETE FROM doc_links WHERE (src = %s OR dst = %s) AND kind = 0",
+            (req.doc_id, req.doc_id),
+        )
+        neighbor_ids = dict.fromkeys(
+            str((pt.payload or {}).get("doc_id", ""))
+            for pt in top[:5]
+            if pt.payload and pt.payload.get("doc_id") and pt.payload["doc_id"] != req.doc_id
+        )
+        for nid in neighbor_ids:
+            conn.execute(
+                "INSERT INTO doc_links (src, dst, kind) VALUES (%s, %s, 0) "
+                "ON CONFLICT DO NOTHING",
+                (req.doc_id, nid),
+            )
+            conn.execute(
+                "INSERT INTO doc_links (src, dst, kind) VALUES (%s, %s, 0) "
+                "ON CONFLICT DO NOTHING",
+                (nid, req.doc_id),
             )
 
     # Push the new/updated page to IndexNow so Bing/Yandex pick it up now instead
