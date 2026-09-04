@@ -38,9 +38,19 @@ export async function onRequestGet(context) {
     if (res.status === 404) return serveNoindex(shell, 404); // real 404, not a soft one
     if (res.ok) doc = await res.json();
   } catch {
-    // VM unreachable — fall through and let the client-side app fetch it.
+    // VM unreachable — fall through to the 503 below.
   }
-  if (!doc) return shell;
+  // Fail closed. Serving the bare shell here returns HTTP 200 carrying the
+  // shell's *homepage* canonical, so a VM outage would tell Google that every
+  // /q URL is a duplicate of the homepage — on a SPOT instance, one preemption
+  // becomes a mass-deindexation switch for the whole corpus. A 503 is the
+  // honest answer and costs nothing but a retry.
+  if (!doc) {
+    return new Response("Corpus temporarily unavailable", {
+      status: 503,
+      headers: { "Retry-After": "120", "Cache-Control": "no-store" },
+    });
+  }
 
   return renderDoc(shell, doc, docId);
 }
@@ -64,7 +74,12 @@ function renderDoc(shell, doc, docId) {
     // Append the things the shell doesn't have: index directive + QAPage schema.
     .on("head", {
       element(e) {
-        e.append(`<meta name="robots" content="index,follow,max-image-preview:large" />`, { html: true });
+        // max-snippet:-1 lifts the length cap so the answer paragraph can be
+        // quoted in full rather than clipped to a default-length fragment.
+        e.append(
+          `<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1" />`,
+          { html: true },
+        );
         e.append(jsonLd(doc, url), { html: true });
       },
     })
@@ -102,17 +117,43 @@ function prerender(doc, docId) {
         .map((r) => `<li><a href="${SITE}/q/${attr(r.doc_id)}">${esc(r.title || r.doc_id)}</a></li>`)
         .join("")}</ul>`
     : "";
+  // Google writes its own snippet on roughly two thirds of listings, taking it
+  // from page prose rather than the meta description. This page used to offer
+  // exactly one prose candidate — the question, in the only <p>, with the whole
+  // answer sealed inside a single <pre> where no snippet generator will look.
+  // So both branches lost: the description restated the question, and so did
+  // Google's own rewrite. data-nosnippet takes the question out of the running,
+  // and the answer is emitted as real paragraphs with code in <pre><code>, so
+  // whichever branch fires, the searcher reads the fix.
   return [
     `<main>`,
     `<h1>${esc(doc.title || "")}</h1>`,
     tags.length ? `<p>${tags.map((t) => esc(t)).join(", ")}</p>` : "",
-    `<h2>Problem</h2><p>${esc(doc.problem || "")}</p>`,
-    `<h2>Solution</h2><pre>${esc(doc.solution || "")}</pre>`,
+    `<h2>Solution</h2>`,
+    solutionHtml(doc.solution || ""),
+    `<h2>Problem</h2><div data-nosnippet><p>${esc(doc.problem || "")}</p></div>`,
     doc.url ? `<p><a href="${attr(doc.url)}" rel="noreferrer">Original source</a></p>` : "",
     relatedBlock,
-    `<p><a href="${SITE}/playground?q=${encodeURIComponent(clip(oneLine(doc.title || ""), 120))}">Search AgentOverflow for related problems</a></p>`,
     `</main>`,
   ].join("");
+}
+
+// Split an answer into prose paragraphs and code blocks. Prose is what a snippet
+// can quote; keeping the code in <pre><code> stops it being quoted as if it were
+// a sentence.
+function solutionHtml(solution) {
+  const parts = String(solution).split(/```/);
+  return parts
+    .map((part, i) => {
+      if (i % 2 === 1) return `<pre><code>${esc(part.replace(/^[^\n]*\n/, ""))}</code></pre>`;
+      return part
+        .split(/\n{2,}/)
+        .map((p) => oneLine(p))
+        .filter(Boolean)
+        .map((p) => `<p>${esc(p)}</p>`)
+        .join("");
+    })
+    .join("");
 }
 
 function jsonLd(doc, url) {
@@ -148,13 +189,16 @@ function jsonLd(doc, url) {
 // So: lead the title with the thing SO's own row can't claim in its title, and
 // spend the description on the answer instead of the question.
 
+// The question, verbatim, and nothing else. Two things forced this:
+// the " — AgentOverflow" suffix pushed 8 of 10 sampled titles past the ~60-char
+// truncation point and the brand got cut off anyway (og:site_name already puts
+// the site name above the title), and Google picks the title link from the <h1>
+// as readily as from <title> — so a <title> that stops matching the <h1> below
+// invites Google to substitute the H1 back and silently undo the edit. The
+// differentiation from Stack Overflow's own row belongs in the snippet, which
+// is the half of the listing that can carry the answer.
 function pageTitle(doc) {
-  const title = clip(oneLine(doc.title || ""), 80) || "Solved problem";
-  // "Solved:" only where a solution genuinely exists — every corpus doc is an
-  // accepted answer scored >= 5, but the prefix is a claim, so it stays tied to
-  // the field rather than the assumption.
-  const prefix = String(doc.solution || "").trim() ? "Solved: " : "";
-  return `${prefix}${title} — AgentOverflow`;
+  return clip(oneLine(doc.title || ""), 70) || "Solved problem";
 }
 
 function metaDescription(doc) {

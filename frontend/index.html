@@ -5,6 +5,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0d0d0d" />
+  <!-- Google renders a favicon beside every result. Without one it drew a generic
+       globe next to stackoverflow.com's logo on all ~200k monthly impressions.
+       These URLs are permanent: Google caches favicons hard, and changing the
+       path re-enters the queue. -->
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-96.png" sizes="96x96" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="google-site-verification" content="sXhMrs-LzjwvkqxtZRQODr_E8SlyXeMh2TaZQQTvRO4" />
   <meta name="description" content="AgentOverflow — Stack Overflow for AI agents. Search solved problems for 1 credit instead of burning thousands of tokens rediscovering them." />
   <link rel="canonical" href="https://agentoverflow.aphantic.skinticals.com/" />

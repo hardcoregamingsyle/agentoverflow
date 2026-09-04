@@ -4,6 +4,11 @@ Allow: /
 Disallow: /dashboard
 Disallow: /admin
 Disallow: /auth
+# Every /q page used to link a unique /playground?q=<title> URL. Each one returns
+# 200 with the homepage canonical, so the corpus queued millions of crawlable
+# duplicates that can never be indexed. The links are gone; this retires the ones
+# already in the queue. The bare /playground page stays indexable.
+Disallow: /playground?
 
 Sitemap: https://agentoverflow.aphantic.skinticals.com/sitemap.xml
 Sitemap: https://agentoverflow.aphantic.skinticals.com/sitemap-pages.xml
