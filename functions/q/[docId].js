@@ -47,8 +47,8 @@ export async function onRequestGet(context) {
 
 function renderDoc(shell, doc, docId) {
   const url = `${SITE}/q/${docId}`;
-  const fullTitle = `${clip(doc.title || "Solved problem", 110)} — AgentOverflow`;
-  const description = clip(oneLine(doc.problem || ""), 160);
+  const fullTitle = pageTitle(doc);
+  const description = metaDescription(doc);
 
   const rw = new HTMLRewriter()
     // Overwrite the singletons the shell already ships.
@@ -136,6 +136,52 @@ function jsonLd(doc, url) {
   return `<script type="application/ld+json">${json}</script>`;
 }
 
+// ── SERP copy ─────────────────────────────────────────────────────────────────
+// The listing, not the ranking, was the problem. These pages average position 8
+// on ~200k monthly impressions and were converting at 0.035% — roughly 50x under
+// the ~1.5% a position-8 result normally earns. The cause is visible the moment
+// you look at a SERP: we shipped the Stack Overflow title verbatim, so our row
+// read as a lower-authority mirror of the row above it, and the description
+// restated the *question* — which the searcher already knows, having just typed
+// it — in raw Markdown, cut mid-word.
+//
+// So: lead the title with the thing SO's own row can't claim in its title, and
+// spend the description on the answer instead of the question.
+
+function pageTitle(doc) {
+  const title = clip(oneLine(doc.title || ""), 80) || "Solved problem";
+  // "Solved:" only where a solution genuinely exists — every corpus doc is an
+  // accepted answer scored >= 5, but the prefix is a claim, so it stays tied to
+  // the field rather than the assumption.
+  const prefix = String(doc.solution || "").trim() ? "Solved: " : "";
+  return `${prefix}${title} — AgentOverflow`;
+}
+
+function metaDescription(doc) {
+  const answer = plain(doc.solution || "");
+  const problem = plain(doc.problem || "");
+  // Answer first. Fall back to the question only when the solution is pure code
+  // and strips to nothing worth reading in a SERP.
+  const body = answer.length >= 60 ? answer : [answer, problem].filter(Boolean).join(" ");
+  return clipWords(body || problem, 155);
+}
+
+// Markdown → prose a human can read in a search result. Fenced code is dropped
+// outright (it renders as noise at 160 chars); inline code keeps its text since
+// that is usually the identifier the answer turns on.
+function plain(s) {
+  return oneLine(
+    String(s)
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/~~~[\s\S]*?~~~/g, " ")
+      .replace(/^ {4,}\S.*$/gm, " ")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/[`*_>#]/g, "")
+      .replace(/^\s*[-+]\s+/gm, " "),
+  );
+}
+
 // ── text helpers ──────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -149,4 +195,15 @@ function oneLine(s) {
 function clip(s, n) {
   const t = String(s);
   return t.length > n ? t.slice(0, n - 1).trimEnd() + "…" : t;
+}
+// Same as clip() but never cuts mid-word — a description ending "attribut…" reads
+// as broken scraper output, which is exactly the impression we're trying to lose.
+// Falls back to a hard cut if the last space is so early that word-safety would
+// throw away most of the budget.
+function clipWords(s, n) {
+  const t = oneLine(s);
+  if (t.length <= n) return t;
+  const cut = t.slice(0, n - 1);
+  const sp = cut.lastIndexOf(" ");
+  return (sp > n * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + "…";
 }
