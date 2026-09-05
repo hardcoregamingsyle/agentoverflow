@@ -442,3 +442,16 @@ export async function publicSearch(
     similarity: Number(r.similarity ?? 0),
   }));
 }
+
+// ── Analytics (GA4 / GTM ids, admin-set on the shared backend) ─────────────
+
+export interface AnalyticsConfig {
+  ga4Id: string | null;
+  gtmId: string | null;
+}
+
+export const getAnalyticsConfig = makeFunctionReference<
+  "query",
+  { site: string },
+  AnalyticsConfig
+>("analytics:getAnalyticsConfig");

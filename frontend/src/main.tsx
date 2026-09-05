@@ -1,5 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { CONVEX_URL } from "@/lib/convexUrl";
+import { Analytics } from "@/components/Analytics";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { StrictMode, Component, lazy, Suspense, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -72,6 +73,8 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ConvexProvider client={convex}>
       <BrowserRouter>
+        {/* GA4 / GTM — consent banner for UK/EU only */}
+        <Analytics />
         <RouteErrorBoundary>
           <Suspense fallback={<RouteLoading />}>
             <Routes>
