@@ -108,6 +108,26 @@ python -m unittest discover -s api/tests -v
 
 Per-route `usePageMeta` on every indexable route except `/` (which keeps the shell's own homepage tags) and `/q/:docId` (which sets its own in `Question.tsx`, and gets them at the edge for crawlers). Add the hook to any new indexable page or it self-canonicalizes to the homepage and drops out of the index. `functions/q/[docId].js` edge-rewrites the shell's singleton head tags and injects crawler-visible content + QAPage JSON-LD (so `frontend/index.html` must keep exactly one title/description/canonical/OG set); sitemap Pages Functions proxy the Convex-built corpus sitemaps onto this domain; `robots.txt` disallows app routes.
 
+### Analytics (GA4 / GTM)
+
+IDs are **not** in this repo. They live in the shared Thalamus backend's
+`analyticsConfig` table (one row per product, set from Thalamus `/admin` →
+Analytics) and are read here through `thalamusApi.ts` like every other
+cross-repo call — so `analytics:getAnalyticsConfig` joins the list of names that
+break this site silently at runtime if renamed there.
+
+`frontend/src/components/Analytics.tsx` gates by region, not by a global
+default: outside the UK/EU/EEA the tags load on first paint with nothing
+suppressed; inside it nothing loads until the visitor accepts the banner. The
+region comes from `functions/geo.js` (Cloudflare's `request.cf.country`), which
+fails closed on an unknown country and is `no-store` — a shared cache entry
+would hand one visitor's privacy regime to the next. The country list is pinned
+by `tests/geoConsent.test.ts` in the thalamus repo.
+
+Gating the banner is a CTR decision as much as a legal one: these pages are
+fighting for a click at position 8, and a consent wall in front of every one of
+them is a tax no visitor outside those regions was owed.
+
 ### Conventions
 
 * Ingestion + API pure-logic modules are stdlib-only with heavy deps (fastembed, qdrant_client, psycopg) imported lazily inside functions — that's why the test suites run with nothing installed. Keep new code testable the same way.
