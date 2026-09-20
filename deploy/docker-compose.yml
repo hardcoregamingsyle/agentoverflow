@@ -1,25 +1,23 @@
-# AgentOverflow VM stack. Memory caps are sized for e2-standard-4 (16 GB);
-# they are limits, not reservations, so the stack still fits after the
-# post-ingestion downsize to e2-standard-2 (8 GB).
+# AgentOverflow VM stack.
+#
+# Qdrant is NOT here any more, and that is the whole point of this file's
+# current shape. The vector index was the only component that needed a big
+# machine — 2.45M x 384-d vectors plus the HNSW graph, capped at 5g against 2g
+# each for Postgres and the API — and it existed solely to serve /v1/search,
+# which no agent was calling. The /q solution pages that carry all of the
+# site's search traffic are a plain Postgres row lookup and never touched it.
+#
+# So search is off (AO_SEARCH_DISABLED below) and the container is gone. What
+# remains — Postgres, the API, Caddy — serves the full 2.45M-page corpus and
+# fits a far smaller instance than e2-standard-4.
+#
+# To bring search back: restore the qdrant service block and its volume from
+# git history, drop AO_SEARCH_DISABLED, and re-run embed-load. The qdrant_data
+# volume is deliberately left declared below so an existing VM's index is not
+# destroyed by this change — `docker compose down` will not remove it, and it
+# is still there to reattach to.
 
 services:
-  qdrant:
-    image: qdrant/qdrant:v1.15.1
-    restart: unless-stopped
-    # Loopback-only: the ingestion pipeline runs on the VM itself; nothing
-    # external ever talks to Qdrant directly.
-    ports:
-      - "127.0.0.1:6333:6333"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    mem_limit: 5g
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -50,6 +48,9 @@ services:
     environment:
       AO_INTERNAL_SECRET: ${AO_INTERNAL_SECRET:?set AO_INTERNAL_SECRET in deploy/.env}
       QDRANT_URL: http://qdrant:6333
+      # Search off: no Qdrant to query. Endpoints answer 503 with a clear
+      # reason instead of hanging on a connection that cannot be made.
+      AO_SEARCH_DISABLED: ${AO_SEARCH_DISABLED:-1}
       PG_DSN: postgresql://ao:${POSTGRES_PASSWORD}@postgres:5432/ao
       # Optional: IndexNow instant-submission key (also hosted at /<key>.txt on
       # the site). Unset → ingest-time submission is a no-op. Enables `python -m
@@ -60,8 +61,6 @@ services:
       AO_SITE_HOST: ${AO_SITE_HOST:-agentoverflow.aphantic.skinticals.com}
     mem_limit: 2g
     depends_on:
-      qdrant:
-        condition: service_healthy
       postgres:
         condition: service_healthy
     healthcheck:
@@ -95,6 +94,10 @@ services:
       - api
 
 volumes:
+  # Kept declared on purpose: an existing VM still holds the built index here,
+  # and leaving the volume named means removing the service does not discard
+  # it. Deleting this line is what would make search rebuildable only from a
+  # full re-ingest.
   qdrant_data:
   pg_data:
   caddy_data:

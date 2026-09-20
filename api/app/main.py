@@ -32,6 +32,7 @@ from app.public import (
     valid_doc_id,
 )
 from app.public_api import router as public_router
+from app.config import SEARCH_DISABLED_DETAIL, search_disabled
 from app.search import SearchRequest, SearchResponse, run_search
 
 _SECRET = os.environ.get("AO_INTERNAL_SECRET", "")
@@ -57,6 +58,8 @@ internal = APIRouter(dependencies=[Depends(require_secret)])
 
 @internal.post("/internal/search", response_model=SearchResponse)
 def internal_search(body: SearchRequest) -> SearchResponse:
+    if search_disabled():
+        raise HTTPException(status_code=503, detail=SEARCH_DISABLED_DETAIL)
     return run_search(body)
 
 

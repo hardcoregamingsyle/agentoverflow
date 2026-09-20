@@ -6,7 +6,10 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
+from app.config import SEARCH_DISABLED_DETAIL, search_disabled
 from app.rerank import Candidate, rerank
+
+__all__ = ["SEARCH_DISABLED_DETAIL", "search_disabled", "SearchRequest", "SearchResponse", "run_search"]
 
 SNIPPET_CHARS = 400
 

@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 
 from app import keystore
 from app.public import run_get_doc, valid_doc_id
+from app.config import SEARCH_DISABLED_DETAIL, search_disabled
 from app.search import SearchRequest, SearchResponse, run_search
 
 router = APIRouter()
@@ -73,6 +74,10 @@ def _charge(auth: Authed, response: Response) -> None:
 def public_search(
     body: SearchRequest, response: Response, auth: Authed = Depends(require_key)
 ) -> SearchResponse:
+    # Checked before charging: a caller must never pay a credit for a search
+    # this deployment cannot run.
+    if search_disabled():
+        raise HTTPException(status_code=503, detail=SEARCH_DISABLED_DETAIL)
     _charge(auth, response)
     return run_search(body)
 
@@ -89,12 +94,19 @@ def public_doc(doc_id: str, response: Response, auth: Authed = Depends(require_k
 
 
 @router.get("/v1/health")
-def public_health() -> dict[str, bool | int]:
+def public_health() -> dict[str, bool | int | str]:
     from app.db import postgres_health, qdrant_health
 
-    qdrant_ok, points = qdrant_health()
     postgres_ok = postgres_health()
-    return {"ok": qdrant_ok and postgres_ok, "points": points}
+    # When search is off there is no Qdrant container to ask, so folding it into
+    # `ok` would report the whole deployment as down while every /q page is
+    # being served perfectly. `ok` tracks what this box is actually still
+    # promising: the corpus pages, which are Postgres alone.
+    if search_disabled():
+        return {"ok": postgres_ok, "points": 0, "search": "disabled"}
+
+    qdrant_ok, points = qdrant_health()
+    return {"ok": qdrant_ok and postgres_ok, "points": points, "search": "enabled"}
 
 
 # ── SEO surface (no auth) ─────────────────────────────────────────────────────
@@ -137,6 +149,8 @@ def public_search_seo(body: SearchRequest, request: Request) -> SearchResponse:
             detail="Too many searches from this address; slow down or sign up for a key.",
             headers={"Retry-After": "60"},
         )
+    if search_disabled():
+        raise HTTPException(status_code=503, detail=SEARCH_DISABLED_DETAIL)
     if body.top_k > PUBLIC_SEARCH_TOP_K:
         body.top_k = PUBLIC_SEARCH_TOP_K
     return run_search(body)
