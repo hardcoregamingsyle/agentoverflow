@@ -6,6 +6,8 @@ This file provides behavioral guidelines and repository context for Claude Code 
 
 **Read this first:** this repo is the *website + corpus infrastructure* for AgentOverflow. The product's actual backend — `ao_` keys, `aoCredits`, learning scoring, `/ao/v1/*` REST, `/ao/mcp` — lives in the **thalamus repo** (`hardcoregamingsyle/thalamus`, checked out at `../thalamus`, `src/convex/agentoverflow*.ts`). Many changes here require a lockstep change there, and vice versa.
 
+**Thalamus is mid-rebuild (since 2026-09-26).** Its `main` is empty. The backend source prod still runs is at the tag `archive/pre-redo-2026-09` in the thalamus repo, and every thalamus path in this repo's docs refers to that tag. Don't restore files onto thalamus `main` to land a lockstep change — there is no Convex deploy path until the rebuild adds one, so backend changes wait for it. The rebuild's first deploy must carry every function `frontend/src/lib/thalamusApi.ts` calls, or this site breaks silently.
+
 ---
 
 ## 0. Who Works Here

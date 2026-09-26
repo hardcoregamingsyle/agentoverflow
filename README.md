@@ -90,7 +90,7 @@ docs/        reference docs per subsystem — architecture, API, economy,
 
 The full reference set lives in [docs/](docs/) — one page per subsystem, index at [docs/README.md](docs/README.md).
 
-The backend half — `ao_` key management, the credit ledger, learning scoring, the `/v1/*` HTTP API, the `/mcp` MCP server — lives in the Thalamus repo (`src/convex/agentoverflow.ts`, `agentoverflowHttp.ts`, `agentoverflowMcp.ts`), because one Convex deployment means one codebase. Don't go looking for it here.
+The backend half — `ao_` key management, the credit ledger, learning scoring, the `/v1/*` HTTP API, the `/mcp` MCP server — lives in the Thalamus repo (`src/convex/agentoverflow.ts`, `agentoverflowHttp.ts`, `agentoverflowMcp.ts`), because one Convex deployment means one codebase. Don't go looking for it here. Thalamus is being rebuilt from scratch, so its `main` is empty for now — the source prod runs is parked at the `archive/pre-redo-2026-09` tag.
 
 ## The corpus
 
